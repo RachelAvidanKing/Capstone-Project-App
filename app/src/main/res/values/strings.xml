@@ -1,3 +1,26 @@
 <resources>
     <string name="app_name">Capstone-Project-Application</string>
+    <!-- כותרת -->
+    <string name="title_input_info">Input Personal Information</string>
+
+    <!-- Gender -->
+    <string name="gender_label">Gender:</string>
+    <string name="male">Male</string>
+    <string name="female">Female</string>
+
+    <!-- Age -->
+    <string name="age_label">Age:</string>
+    <string name="age_18_25">18-25</string>
+    <string name="age_26_35">26-35</string>
+    <string name="age_36_45">36-45</string>
+    <string name="age_46_60">46-60</string>
+    <string name="age_60_plus">60+</string>
+
+    <!-- Eye Issues -->
+    <string name="eye_label">Known eye issues:</string>
+    <string name="has_glasses">Has glasses</string>
+    <string name="no_glasses">Doesn’t have glasses</string>
+
+    <!-- Button -->
+    <string name="next">Next</string>
 </resources>

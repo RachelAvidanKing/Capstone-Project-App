@@ -1,20 +1,143 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:padding="16dp"
+    android:background="@android:color/white">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-    <!-- This is a comment -->
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <!-- כותרת -->
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/title_input_info"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/holo_blue_light"
+            android:layout_marginTop="100dp"
+            android:layout_marginBottom="40dp"/>
+
+        <!-- Gender -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/gender_label"
+            android:textStyle="bold"
+            android:textSize="22sp"
+            android:textColor="@android:color/holo_blue_bright"
+            android:layout_marginTop="40dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgGender"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbMale"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:layout_marginRight="40dp"
+                android:text="@string/male" />
+
+            <RadioButton
+                android:id="@+id/rbFemale"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/female" />
+        </RadioGroup>
+
+        <!-- Age -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/age_label"
+            android:textStyle="bold"
+            android:textSize="22sp"
+            android:textColor="@android:color/holo_blue_bright"
+            android:layout_marginTop="10dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgAge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbAge1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/age_18_25" />
+
+            <RadioButton
+                android:id="@+id/rbAge2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/age_26_35" />
+
+            <RadioButton
+                android:id="@+id/rbAge3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/age_36_45" />
+
+            <RadioButton
+                android:id="@+id/rbAge4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/age_46_60" />
+
+            <RadioButton
+                android:id="@+id/rbAge5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/age_60_plus" />
+        </RadioGroup>
+
+        <!-- Known Eye Issues -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/eye_label"
+            android:textStyle="bold"
+            android:textSize="22sp"
+            android:textColor="@android:color/holo_blue_bright"
+            android:layout_marginTop="10dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgEye"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbGlasses"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:layout_marginRight="20dp"
+                android:text="@string/has_glasses" />
+
+            <RadioButton
+                android:id="@+id/rbNoGlasses"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:layout_marginLeft="60dp"
+                android:text="@string/no_glasses" />
+        </RadioGroup>
+    </LinearLayout>
+</ScrollView>
