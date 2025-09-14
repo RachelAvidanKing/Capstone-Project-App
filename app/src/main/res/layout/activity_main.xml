@@ -6,6 +6,7 @@
     android:background="@android:color/white">
 
     <LinearLayout
+        android:id="@+id/main"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -24,14 +25,15 @@
             android:layout_marginBottom="40dp"/>
 
         <!-- Gender -->
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
             android:text="@string/gender_label"
-            android:textStyle="bold"
-            android:textSize="22sp"
             android:textColor="@android:color/holo_blue_bright"
-            android:layout_marginTop="40dp"/>
+            android:textSize="22sp"
+            android:textStyle="bold" />
 
         <RadioGroup
             android:id="@+id/rgGender"
@@ -44,7 +46,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="18sp"
-                android:layout_marginRight="40dp"
+                android:layout_marginEnd="40dp"
                 android:text="@string/male" />
 
             <RadioButton
@@ -69,7 +71,7 @@
             android:id="@+id/rgAge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
             <RadioButton
                 android:id="@+id/rbAge1"
@@ -128,7 +130,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="18sp"
-                android:layout_marginRight="20dp"
+                android:layout_marginEnd="20dp"
                 android:text="@string/has_glasses" />
 
             <RadioButton
@@ -136,8 +138,55 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="18sp"
-                android:layout_marginLeft="60dp"
+                android:layout_marginStart="60dp"
                 android:text="@string/no_glasses" />
         </RadioGroup>
+
+        <!-- Known Attention Deficit -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/add_label"
+            android:textStyle="bold"
+            android:textSize="22sp"
+            android:textColor="@android:color/holo_blue_bright"
+            android:layout_marginTop="10dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgAttentionDeficit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbAddYes"
+                android:layout_width="81dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="20dp"
+                android:text="@string/yes"
+                android:textSize="18sp" />
+
+            <RadioButton
+                android:id="@+id/rbAddNo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="@string/no" />
+        </RadioGroup>
+
+
+        <!-- Next Button -->
+        <Button
+            android:id="@+id/btnNext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:layout_marginBottom="40dp"
+            android:paddingHorizontal="40dp"
+            android:text="@string/next"
+            android:textSize="18sp"
+            android:backgroundTint="@android:color/holo_blue_light"
+            android:textColor="@android:color/white" />
+
     </LinearLayout>
 </ScrollView>
