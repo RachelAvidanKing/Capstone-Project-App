@@ -21,6 +21,11 @@
     <string name="has_glasses">Has glasses</string>
     <string name="no_glasses">Doesn’t have glasses</string>
 
+    <!-- ADD Issues -->
+    <string name="add_label">Known ADD/ADHD issues:</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+
     <!-- Button -->
     <string name="next">Next</string>
 </resources>

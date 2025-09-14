@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.capstone_project_application.database.AppDatabase
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rgGender: RadioGroup
     private lateinit var rgAge: RadioGroup
     private lateinit var rgEye: RadioGroup
+    private lateinit var rgAttentionDeficit: RadioGroup // Added the RadioGroup for attention deficit
     private lateinit var btnNext: Button // Reference for the button from XML
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         rgGender = findViewById(R.id.rgGender)
         rgAge = findViewById(R.id.rgAge)
         rgEye = findViewById(R.id.rgEye)
+        rgAttentionDeficit = findViewById(R.id.rgAttentionDeficit) // Initialized the new RadioGroup
         btnNext = findViewById(R.id.btnNext) // Get the button from the XML layout
 
         // Set the click listener on the button from the layout
@@ -70,8 +73,10 @@ class MainActivity : AppCompatActivity() {
         val selectedGender = getSelectedGender()
         val selectedAge = getSelectedAge()
         val hasGlasses = getSelectedEyeIssue()
+        val hasAttentionDeficit = getSelectedAttentionDeficit() // Get the new value
 
-        if (selectedGender == null || selectedAge == null || hasGlasses == null) {
+        // Update the null check to include the new value
+        if (selectedGender == null || selectedAge == null || hasGlasses == null || hasAttentionDeficit == null) {
             Toast.makeText(this, "Please fill in all fields", Toast.LENGTH_SHORT).show()
             return
         }
@@ -82,23 +87,33 @@ class MainActivity : AppCompatActivity() {
                 val participantId = repository.registerParticipant(
                     age = selectedAge,
                     gender = selectedGender,
+                    hasGlasses = hasGlasses, // Pass the hasGlasses value
+                    hasAttentionDeficit = hasAttentionDeficit, // Pass the new value
                     consentGiven = true // Assuming consent is given when they proceed
                 )
                 // This is the log message you were looking for
                 Log.d("MainActivity", "Participant registered successfully with demographics. ID: $participantId")
                 Toast.makeText(this@MainActivity, "Registration successful!", Toast.LENGTH_LONG).show()
 
-                // Here you can navigate to the next screen or start data collection
-                // For example:
-                // val intent = Intent(this@MainActivity, DataCollectionActivity::class.java)
-                // startActivity(intent)
-
+                // For testing: trigger an immediate upload after registration
+                triggerImmediateUpload()
 
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error registering participant", e)
                 Toast.makeText(this@MainActivity, "Registration failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun triggerImmediateUpload() {
+        Log.d("MainActivity", "Triggering immediate data upload for testing.")
+        val uploadConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val uploadWorkRequest = OneTimeWorkRequestBuilder<DataUploaderWorker>()
+            .setConstraints(uploadConstraints)
+            .build()
+        WorkManager.getInstance(this@MainActivity).enqueue(uploadWorkRequest)
     }
 
     private fun getSelectedGender(): String? {
@@ -124,6 +139,15 @@ class MainActivity : AppCompatActivity() {
         return when (rgEye.checkedRadioButtonId) {
             R.id.rbGlasses -> true
             R.id.rbNoGlasses -> false
+            else -> null
+        }
+    }
+
+    // New function to get the attention deficit selection
+    private fun getSelectedAttentionDeficit(): Boolean? {
+        return when (rgAttentionDeficit.checkedRadioButtonId) {
+            R.id.rbAddYes -> true
+            R.id.rbAddNo -> false
             else -> null
         }
     }

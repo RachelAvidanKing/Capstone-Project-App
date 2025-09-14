@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [MovementDataPoint::class, Participant::class],
-    version = 1,
+    version = 2, // Incremented version to handle schema change
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

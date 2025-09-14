@@ -29,15 +29,26 @@ class DataRepository(private val database: AppDatabase, private val context: Con
     }
 
     /**
-     * Register a new participant with consent and demographics
+     * Register a new participant with consent and demographics.
+     * This creates a NEW participant and sets them as the current one.
      */
-    suspend fun registerParticipant(age: Int, gender: String, consentGiven: Boolean): String {
+    suspend fun registerParticipant(age: Int, gender: String, consentGiven: Boolean, hasGlasses: Boolean,hasAttentionDeficit: Boolean): String {
         return withContext(Dispatchers.IO) {
-            val participantId = getCurrentParticipantId()
+            // Generate a new unique ID for each new participant
+            val participantId = UUID.randomUUID().toString()
+
+            // Set this new ID as the "current" one for this session,
+            // so that subsequent movement data is associated with it.
+            sharedPrefs.edit()
+                .putString("current_participant_id", participantId)
+                .apply()
+
             val participant = Participant(
                 participantId = participantId,
                 age = age,
                 gender = gender,
+                hasGlasses = hasGlasses,
+                hasAttentionDeficit = hasAttentionDeficit,
                 consentGiven = consentGiven,
                 registrationTimestamp = System.currentTimeMillis()
             )
