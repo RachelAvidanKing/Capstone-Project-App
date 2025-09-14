@@ -4,16 +4,20 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.capstoneprojectapplication.database.MovementDataPoint
 
 /**
  * The main Room database class for the application.
  * This class ties together the entities and DAOs.
  */
-@Database(entities = [MovementDataPoint::class], version = 1, exportSchema = false)
+@Database(
+    entities = [MovementDataPoint::class, Participant::class],
+    version = 1,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun movementDataDao(): MovementDataDao
+    abstract fun participantDao(): ParticipantDao
 
     companion object {
         // Volatile ensures that the INSTANCE is always up-to-date and the same for all execution threads.
@@ -26,13 +30,12 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "movement_database"
+                    "capstone_movement_database"
                 )
                     // Wipes and rebuilds instead of migrating if no Migration object is provided.
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
-                // return instance
                 instance
             }
         }

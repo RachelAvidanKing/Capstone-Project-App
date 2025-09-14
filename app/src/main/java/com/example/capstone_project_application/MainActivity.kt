@@ -1,79 +1,160 @@
 package com.example.capstone_project_application
 
 import android.os.Bundle
+import android.util.Log
+import android.widget.Button
+import android.widget.RadioGroup
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.example.capstone_project_application.database.AppDatabase
+import com.example.capstone_project_application.database.DataRepository
+import com.example.capstone_project_application.database.DataUploaderWorker
+import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
+
+    // Get a reference to the database and repository
+    private val database by lazy { AppDatabase.getDatabase(this) }
+    private val repository by lazy { DataRepository(database, this) }
+
+    // UI Components
+    private lateinit var rgGender: RadioGroup
+    private lateinit var rgAge: RadioGroup
+    private lateinit var rgEye: RadioGroup
+    private lateinit var btnNext: Button // Reference for the button from XML
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
-        //comment
-    }
-}
 
-/*
-// This would be inside your MainActivity.kt file
-// app/src/main/java/com/example/capstoneprojectapplication/MainActivity.kt
+        // Initialize UI components
+        initializeViews()
 
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
-import android.util.Log
-import androidx.lifecycle.lifecycleScope // Important import
-import com.example.capstoneprojectapplication.database.AppDatabase
-import com.example.capstoneprojectapplication.database.MovementDataPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+        // Setup periodic data upload to Firebase
+        setupPeriodicDataUpload()
 
-class MainActivity : AppCompatActivity() {
-
-    // 1. Get a reference to the database.
-    // 'lazy' means the database will only be created the first time you actually use it.
-    private val database by lazy { AppDatabase.getDatabase(this) }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main) // Your UI layout file
-
-        // Example: Let's insert a new data point into the database.
-        // This is how you would call it from your activity.
-        insertNewMovementData()
+        // Check if participant is already registered
+        checkParticipantRegistration()
     }
 
-    private fun insertNewMovementData() {
-        // 2. Launch a coroutine to run the database operation on a background thread.
-        // lifecycleScope is tied to your Activity's lifecycle and handles cancellation for you.
-        lifecycleScope.launch(Dispatchers.IO) {
-            // Dispatchers.IO is the thread pool specifically for I/O operations like database access.
+    private fun initializeViews() {
+        rgGender = findViewById(R.id.rgGender)
+        rgAge = findViewById(R.id.rgAge)
+        rgEye = findViewById(R.id.rgEye)
+        btnNext = findViewById(R.id.btnNext) // Get the button from the XML layout
 
-            Log.d("MainActivity", "Inserting a new data point...")
-
-            // 3. Create a sample data point.
-            val newDataPoint = MovementDataPoint(
-                timestamp = System.currentTimeMillis(),
-                latitude = 32.79,
-                longitude = 34.98,
-                altitude = 100.0,
-                speed = 5.0f,
-                accelX = 0.1f,
-                accelY = 9.8f,
-                accelZ = 0.5f
-            )
-
-            // 4. Use the DAO to insert the data.
-            database.movementDataDao().insert(newDataPoint)
-
-            Log.d("MainActivity", "New data point inserted successfully!")
+        // Set the click listener on the button from the layout
+        btnNext.setOnClickListener {
+            handleNextButtonClick()
         }
     }
-}
 
- */
+    private fun handleNextButtonClick() {
+        val selectedGender = getSelectedGender()
+        val selectedAge = getSelectedAge()
+        val hasGlasses = getSelectedEyeIssue()
+
+        if (selectedGender == null || selectedAge == null || hasGlasses == null) {
+            Toast.makeText(this, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Register participant
+        lifecycleScope.launch {
+            try {
+                val participantId = repository.registerParticipant(
+                    age = selectedAge,
+                    gender = selectedGender,
+                    consentGiven = true // Assuming consent is given when they proceed
+                )
+                // This is the log message you were looking for
+                Log.d("MainActivity", "Participant registered successfully with demographics. ID: $participantId")
+                Toast.makeText(this@MainActivity, "Registration successful!", Toast.LENGTH_LONG).show()
+
+                // Here you can navigate to the next screen or start data collection
+                // For example:
+                // val intent = Intent(this@MainActivity, DataCollectionActivity::class.java)
+                // startActivity(intent)
+
+
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error registering participant", e)
+                Toast.makeText(this@MainActivity, "Registration failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun getSelectedGender(): String? {
+        return when (rgGender.checkedRadioButtonId) {
+            R.id.rbMale -> "Male"
+            R.id.rbFemale -> "Female"
+            else -> null
+        }
+    }
+
+    private fun getSelectedAge(): Int? {
+        return when (rgAge.checkedRadioButtonId) {
+            R.id.rbAge1 -> 22 // Average of 18-25
+            R.id.rbAge2 -> 30 // Average of 26-35
+            R.id.rbAge3 -> 40 // Average of 36-45
+            R.id.rbAge4 -> 53 // Average of 46-60
+            R.id.rbAge5 -> 65 // Average of 60+
+            else -> null
+        }
+    }
+
+    private fun getSelectedEyeIssue(): Boolean? {
+        return when (rgEye.checkedRadioButtonId) {
+            R.id.rbGlasses -> true
+            R.id.rbNoGlasses -> false
+            else -> null
+        }
+    }
+
+    private fun checkParticipantRegistration() {
+        lifecycleScope.launch {
+            val isRegistered = repository.isParticipantRegistered()
+            if (isRegistered) {
+                val participant = repository.getCurrentParticipant()
+                participant?.let {
+                    Log.d("MainActivity", "Participant already registered: ${it.participantId}")
+                    Toast.makeText(this@MainActivity, "Welcome back! You're already registered.", Toast.LENGTH_SHORT).show()
+                    // You might want to navigate to the next screen here as well
+                }
+            }
+        }
+    }
+
+    private fun setupPeriodicDataUpload() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val uploadWorkRequest = PeriodicWorkRequestBuilder<DataUploaderWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "DataUploadWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            uploadWorkRequest
+        )
+    }
+}

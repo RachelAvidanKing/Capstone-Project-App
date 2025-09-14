@@ -2,8 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 
-    // The new plugins for Room and Firebase
-    id("com.google.devtools.ksp")
+    // Use KAPT instead of KSP if KSP is causing issues
+    kotlin("kapt")
     id("com.google.gms.google-services")
 }
 
@@ -42,22 +42,38 @@ android {
 dependencies {
 
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 
-    // Room Database Dependencies
+    // Room Database Dependencies (using KAPT instead of KSP)
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
-    // Annotation processor
-    ksp("androidx.room:room-compiler:$roomVersion")
+    // Using KAPT instead of KSP for Room annotation processor
+    kapt("androidx.room:room-compiler:$roomVersion")
 
-    // Firebase (for Firestore later)
-    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
+    // Firebase BOM - Import the Firebase BoM
+    implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
+    // Add the dependency for the Firebase SDK for Google Analytics
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    // Add the dependency for the Cloud Firestore library
     implementation("com.google.firebase:firebase-firestore-ktx")
+    // Optional: Firebase Auth if you want user authentication later
     implementation("com.google.firebase:firebase-auth-ktx")
+
+    // WorkManager for background tasks (data upload)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Lifecycle components
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }
