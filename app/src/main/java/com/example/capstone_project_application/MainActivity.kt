@@ -19,8 +19,11 @@ import androidx.work.WorkManager
 import com.example.capstone_project_application.database.AppDatabase
 import com.example.capstone_project_application.database.DataRepository
 import com.example.capstone_project_application.database.DataUploaderWorker
+import com.example.capstone_project_application.logic.ThresholdActivity
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import android.content.Intent
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -94,6 +97,11 @@ class MainActivity : AppCompatActivity() {
                 // This is the log message you were looking for
                 Log.d("MainActivity", "Participant registered successfully with demographics. ID: $participantId")
                 Toast.makeText(this@MainActivity, "Registration successful!", Toast.LENGTH_LONG).show()
+                //
+                val intent = Intent(this@MainActivity, ThresholdActivity::class.java)
+                startActivity(intent)
+                finish()
+                //
 
                 // For testing: trigger an immediate upload after registration
                 triggerImmediateUpload()

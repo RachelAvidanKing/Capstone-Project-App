@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_gradient">
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Find Personal Threshold"
+        android:textSize="35sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/holo_blue_light"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="80dp" />
+
+    <!-- Square A -->
+    <View
+        android:id="@+id/viewA"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:background="@color/white"
+        app:layout_constraintTop_toBottomOf="@id/tvTitle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/viewB"
+        app:layout_constraintHorizontal_chainStyle="spread"
+        android:layout_marginTop="100dp"/>
+
+    <!-- Square B -->
+    <View
+        android:id="@+id/viewB"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:background="@color/white"
+        app:layout_constraintTop_toBottomOf="@id/tvTitle"
+        app:layout_constraintStart_toEndOf="@id/viewA"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="100dp"/>
+
+    <!-- Text below square A -->
+    <TextView
+        android:id="@+id/labelA"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="A"
+        android:textSize="25sp"
+        android:textStyle="italic"
+        app:layout_constraintTop_toBottomOf="@id/viewA"
+        app:layout_constraintStart_toStartOf="@id/viewA"
+        app:layout_constraintEnd_toEndOf="@id/viewA"
+        android:layout_marginTop="8dp"/>
+
+    <!-- Text below square B -->
+    <TextView
+        android:id="@+id/labelB"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="B"
+        android:textSize="25sp"
+        android:textStyle="italic"
+        app:layout_constraintTop_toBottomOf="@id/viewB"
+        app:layout_constraintStart_toStartOf="@id/viewB"
+        app:layout_constraintEnd_toEndOf="@id/viewB"
+        android:layout_marginTop="8dp"/>
+
+    <!-- שאלה -->
+    <TextView
+        android:id="@+id/tvQuestion"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Which is brighter?"
+        android:textSize="25sp"
+        android:textStyle="italic"
+        android:textColor="@android:color/black"
+        app:layout_constraintTop_toBottomOf="@id/labelA"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="82dp"/>
+
+    <!-- כפתור A -->
+    <Button
+        android:id="@+id/btnA"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="A"
+        android:backgroundTint="@android:color/holo_blue_light"
+        app:layout_constraintTop_toBottomOf="@id/tvQuestion"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnB"
+        app:layout_constraintHorizontal_chainStyle="spread"
+        android:layout_marginTop="25dp"/>
+
+    <!-- כפתור B -->
+    <Button
+        android:id="@+id/btnB"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="B"
+        android:backgroundTint="@android:color/holo_blue_light"
+        app:layout_constraintTop_toBottomOf="@id/tvQuestion"
+        app:layout_constraintStart_toEndOf="@id/btnA"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="25dp"/>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
