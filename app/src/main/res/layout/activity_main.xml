@@ -6,6 +6,7 @@
     android:background="@android:color/white">
 
     <LinearLayout
+        android:id="@+id/main"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -17,21 +18,21 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/title_input_info"
-            android:textSize="32sp"
+            android:textSize="35sp"
             android:textStyle="bold"
             android:textColor="@android:color/holo_blue_light"
-            android:layout_marginTop="100dp"
+            android:layout_marginTop="30dp"
             android:layout_marginBottom="40dp"/>
 
         <!-- Gender -->
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/gender_label"
-            android:textStyle="bold"
-            android:textSize="22sp"
             android:textColor="@android:color/holo_blue_bright"
-            android:layout_marginTop="40dp"/>
+            android:textSize="26sp"
+            android:textStyle="bold" />
 
         <RadioGroup
             android:id="@+id/rgGender"
@@ -43,15 +44,15 @@
                 android:id="@+id/rbMale"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
-                android:layout_marginRight="40dp"
+                android:textSize="20sp"
+                android:layout_marginEnd="40dp"
                 android:text="@string/male" />
 
             <RadioButton
                 android:id="@+id/rbFemale"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:text="@string/female" />
         </RadioGroup>
 
@@ -61,7 +62,7 @@
             android:layout_height="wrap_content"
             android:text="@string/age_label"
             android:textStyle="bold"
-            android:textSize="22sp"
+            android:textSize="26sp"
             android:textColor="@android:color/holo_blue_bright"
             android:layout_marginTop="10dp"/>
 
@@ -69,41 +70,41 @@
             android:id="@+id/rgAge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
             <RadioButton
                 android:id="@+id/rbAge1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:text="@string/age_18_25" />
 
             <RadioButton
                 android:id="@+id/rbAge2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:text="@string/age_26_35" />
 
             <RadioButton
                 android:id="@+id/rbAge3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:text="@string/age_36_45" />
 
             <RadioButton
                 android:id="@+id/rbAge4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:text="@string/age_46_60" />
 
             <RadioButton
                 android:id="@+id/rbAge5"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:text="@string/age_60_plus" />
         </RadioGroup>
 
@@ -113,7 +114,7 @@
             android:layout_height="wrap_content"
             android:text="@string/eye_label"
             android:textStyle="bold"
-            android:textSize="22sp"
+            android:textSize="26sp"
             android:textColor="@android:color/holo_blue_bright"
             android:layout_marginTop="10dp"/>
 
@@ -127,17 +128,63 @@
                 android:id="@+id/rbGlasses"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
-                android:layout_marginRight="20dp"
+                android:textSize="20sp"
+                android:layout_marginEnd="20dp"
                 android:text="@string/has_glasses" />
 
             <RadioButton
                 android:id="@+id/rbNoGlasses"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
-                android:layout_marginLeft="60dp"
+                android:textSize="20sp"
+                android:layout_marginStart="60dp"
                 android:text="@string/no_glasses" />
         </RadioGroup>
+
+        <!-- Known Attention Deficit -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/add_label"
+            android:textStyle="bold"
+            android:textSize="26sp"
+            android:textColor="@android:color/holo_blue_bright"
+            android:layout_marginTop="10dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgAttentionDeficit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbAddYes"
+                android:layout_width="81dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="20dp"
+                android:text="@string/yes"
+                android:textSize="20sp" />
+
+            <RadioButton
+                android:id="@+id/rbAddNo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="20sp"
+                android:text="@string/no" />
+        </RadioGroup>
+
+        <!-- Next Button -->
+        <Button
+            android:id="@+id/btnNext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="40dp"
+            android:paddingHorizontal="40dp"
+            android:text="@string/next"
+            android:textSize="22sp"
+            android:backgroundTint="@android:color/holo_blue_light"
+            android:textColor="@android:color/white" />
+
     </LinearLayout>
 </ScrollView>
