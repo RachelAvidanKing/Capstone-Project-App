@@ -101,27 +101,12 @@ class MainActivity : AppCompatActivity() {
                 val intent = Intent(this@MainActivity, ThresholdActivity::class.java)
                 startActivity(intent)
                 finish()
-                //
-
-                // For testing: trigger an immediate upload after registration
-                //triggerImmediateUpload()
 
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error registering participant", e)
                 Toast.makeText(this@MainActivity, "Registration failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
-    }
-
-    private fun triggerImmediateUpload() {
-        Log.d("MainActivity", "Triggering immediate data upload for testing.")
-        val uploadConstraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        val uploadWorkRequest = OneTimeWorkRequestBuilder<DataUploaderWorker>()
-            .setConstraints(uploadConstraints)
-            .build()
-        WorkManager.getInstance(this@MainActivity).enqueue(uploadWorkRequest)
     }
 
     private fun getSelectedGender(): String? {

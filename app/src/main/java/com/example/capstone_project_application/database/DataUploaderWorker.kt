@@ -21,23 +21,6 @@ class DataUploaderWorker(
     private val firestore = FirebaseFirestore.getInstance()
     private val roomDb = AppDatabase.getDatabase(appContext)
 
-    /*override suspend fun doWork(): Result {
-        return withContext(Dispatchers.IO) {
-            try {
-                // Upload participants first
-                uploadParticipants()
-
-                // Then upload movement data
-                uploadMovementData()
-
-                Result.success()
-            } catch (e: Exception) {
-                Log.e("DataUploaderWorker", "Upload failed", e)
-                Result.retry()
-            }
-        }
-    }*/
-
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {
             try {
@@ -65,10 +48,21 @@ class DataUploaderWorker(
             Log.d("DataUploaderWorker", "Uploading ${unsyncedParticipants.size} participants")
 
             for (participant in unsyncedParticipants) {
+                val participantMap = mapOf(
+                    "participantId" to participant.participantId,
+                    "age" to participant.age,
+                    "gender" to participant.gender,
+                    "hasGlasses" to participant.hasGlasses,
+                    "hasAttentionDeficit" to participant.hasAttentionDeficit,
+                    "consentGiven" to participant.consentGiven,
+                    "registrationTimestamp" to participant.registrationTimestamp,
+                    "jndThreshold" to participant.jndThreshold
+                )
+
                 // Upload to Firestore
                 firestore.collection("participants")
                     .document(participant.participantId)
-                    .set(participant)
+                    .set(participantMap) // Use the map here
                     .await()
             }
 

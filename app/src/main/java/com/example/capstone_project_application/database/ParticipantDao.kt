@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 
 /**
  * Data Access Object (DAO) for the Participant entity.
@@ -25,4 +26,7 @@ interface ParticipantDao {
 
     @Query("SELECT * FROM participants")
     suspend fun getAllParticipants(): List<Participant>
+
+    @Update
+    suspend fun update(participant: Participant)
 }

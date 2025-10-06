@@ -1,16 +1,30 @@
 package com.example.capstone_project_application.logic
 
+import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.capstone_project_application.databinding.ActivityThresholdBinding
 import com.example.capstone_project_application.R
+import com.example.capstone_project_application.database.AppDatabase
+import com.example.capstone_project_application.database.DataRepository
+import com.example.capstone_project_application.database.DataUploaderWorker
+import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class ThresholdActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityThresholdBinding
+
+    // Database and repository
+    private val database by lazy { AppDatabase.getDatabase(this) }
+    private val repository by lazy { DataRepository(database, this) }
 
     // Algorithm constants
     private val N_TOTAL = 100
@@ -31,7 +45,7 @@ class ThresholdActivity : AppCompatActivity() {
         160 to R.color.blue_160,
         165 to R.color.blue_165,
         175 to R.color.blue_175,
-        140 to R.color.blue_140  // Add blue_140 to your colors.xml
+        140 to R.color.blue_140
     )
 
     // Tracking variables
@@ -70,6 +84,7 @@ class ThresholdActivity : AppCompatActivity() {
             correctAnswers[hue] = 0
         }
         trialCount = 0
+        updateTrialInfo()
     }
 
     private fun startNextTrial() {
@@ -110,7 +125,7 @@ class ThresholdActivity : AppCompatActivity() {
         // Increment occurrence count
         occurrences[currentSelectedHue] = occurrences[currentSelectedHue]!! + 1
 
-        // Update trial counter display (optional)
+        // Update trial counter display
         updateTrialInfo()
     }
 
@@ -139,32 +154,94 @@ class ThresholdActivity : AppCompatActivity() {
     }
 
     private fun updateTrialInfo() {
-        // Optional: Update UI with trial progress
-        // For example, you could add a TextView to show "Trial X of N_TOTAL"
-        // binding.tvTrialInfo.text = "Trial $trialCount of $N_TOTAL"
+        // Update UI with trial progress
+        binding.tvTrialCounter.text = "Trial $trialCount of $N_TOTAL"
     }
 
-    private fun completeExperiment() {
-        // Calculate results
-        val results = StringBuilder()
-        results.append("Experiment Complete!\n\n")
+    private fun calculateJNDThreshold(): Int? {
+        // Calculate percentage correct for each hue
+        val huePerformance = mutableListOf<Pair<Int, Double>>()
 
         for (hue in HUES) {
             val correct = correctAnswers[hue]!!
             val total = occurrences[hue]!!
-            val percentage = if (total > 0) (correct * 100.0 / total) else 0.0
-            results.append("Hue $hue: $correct/$total (${String.format("%.1f", percentage)}%)\n")
+            if (total > 0) {
+                val percentage = (correct * 100.0) / total
+                huePerformance.add(Pair(hue, percentage))
+                Log.d("ThresholdActivity", "Hue $hue: $correct/$total (${String.format("%.1f", percentage)}%)")
+            }
         }
 
-        Toast.makeText(this, "Experiment completed! Total trials: $trialCount", Toast.LENGTH_LONG).show()
+        // Sort hues in descending order (highest to lowest)
+        huePerformance.sortByDescending { it.first }
 
-        // Log results or save to database
-        android.util.Log.d("ThresholdActivity", results.toString())
+        // Find the highest hue number where performance is 50% or less
+        var threshold: Int? = null
+        for ((hue, percentage) in huePerformance) {
+            if (percentage <= 50.0) {
+                if (threshold == null || hue > threshold) {
+                    threshold = hue
+                }
+            }
+        }
 
-        // You might want to save results to your database here
-        // or navigate to a results screen
+        Log.d("ThresholdActivity", "Calculated JND Threshold: $threshold")
+        return threshold
+    }
 
-        // Optionally, finish the activity or show results
+    private fun completeExperiment() {
+        // Disable buttons to prevent further clicks
+        binding.btnA.isEnabled = false
+        binding.btnB.isEnabled = false
+
+        // Calculate JND threshold
+        val jndThreshold = calculateJNDThreshold()
+
+        // Save threshold to database
+        lifecycleScope.launch {
+            try {
+                val participant = repository.getCurrentParticipant()
+                if (participant != null) {
+                    // Update participant with JND threshold
+                    val updatedParticipant = participant.copy(jndThreshold = jndThreshold)
+                    repository.updateParticipant(updatedParticipant)
+
+                    Log.d("ThresholdActivity", "JND Threshold saved: $jndThreshold for participant ${participant.participantId}")
+
+                    WorkScheduler.triggerImmediateUpload(this@ThresholdActivity)
+
+                    // Show results
+                    val message = if (jndThreshold != null) {
+                        "Experiment complete! Your JND threshold: Blue $jndThreshold"
+                    } else {
+                        "Experiment complete! No threshold detected (performance > 50% for all hues)"
+                    }
+                    Toast.makeText(this@ThresholdActivity, message, Toast.LENGTH_LONG).show()
+
+                    // Show "Next" button to continue to the next activity
+                    binding.btnNext.visibility = android.view.View.VISIBLE
+                    binding.btnNext.setOnClickListener {
+                        navigateToNextActivity()
+                    }
+                } else {
+                    Log.e("ThresholdActivity", "No participant found in database")
+                    Toast.makeText(this@ThresholdActivity, "Error: No participant data found", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Log.e("ThresholdActivity", "Error saving threshold", e)
+                Toast.makeText(this@ThresholdActivity, "Error saving results: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun navigateToNextActivity() {
+        // TODO: Replace with your actual next activity
+        // Example:
+        // val intent = Intent(this, NextActivity::class.java)
+        // startActivity(intent)
         // finish()
+
+        Toast.makeText(this, "Navigate to next activity (not implemented yet)", Toast.LENGTH_SHORT).show()
+        finish()
     }
 }

@@ -16,5 +16,6 @@ data class Participant(
     val hasAttentionDeficit: Boolean,
     val consentGiven: Boolean,
     val registrationTimestamp: Long,
-    var isUploaded: Boolean = false
+    var jndThreshold: Int? = null, // The highest hue number where participant gets 50% or less correct
+    var isUploaded: Boolean = false // ADDED: Flag to track if the participant data has been uploaded
 )
