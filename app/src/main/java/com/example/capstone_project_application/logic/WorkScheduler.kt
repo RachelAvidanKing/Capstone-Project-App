@@ -6,7 +6,7 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.example.capstone_project_application.database.DataUploaderWorker
+import com.example.capstone_project_application.database.DataUploadWorker
 
 object WorkScheduler {
     private const val TAG = "WorkScheduler"
@@ -24,7 +24,7 @@ object WorkScheduler {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        val uploadWorkRequest = OneTimeWorkRequestBuilder<DataUploaderWorker>()
+        val uploadWorkRequest = OneTimeWorkRequestBuilder<DataUploadWorker>()
             .setConstraints(uploadConstraints)
             .build()
 

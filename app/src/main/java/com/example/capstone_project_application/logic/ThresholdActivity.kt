@@ -1,20 +1,15 @@
 package com.example.capstone_project_application.logic
 
-import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.example.capstone_project_application.databinding.ActivityThresholdBinding
 import com.example.capstone_project_application.R
 import com.example.capstone_project_application.database.AppDatabase
 import com.example.capstone_project_application.database.DataRepository
-import com.example.capstone_project_application.database.DataUploaderWorker
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 

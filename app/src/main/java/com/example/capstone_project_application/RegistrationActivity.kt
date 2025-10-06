@@ -13,19 +13,18 @@ import androidx.lifecycle.lifecycleScope
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.capstone_project_application.database.AppDatabase
 import com.example.capstone_project_application.database.DataRepository
-import com.example.capstone_project_application.database.DataUploaderWorker
+import com.example.capstone_project_application.database.DataUploadWorker
 import com.example.capstone_project_application.logic.ThresholdActivity
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import android.content.Intent
 
 
-class MainActivity : AppCompatActivity() {
+class RegistrationActivity : AppCompatActivity() {
 
     // Get a reference to the database and repository
     private val database by lazy { AppDatabase.getDatabase(this) }
@@ -95,16 +94,16 @@ class MainActivity : AppCompatActivity() {
                     consentGiven = true // Assuming consent is given when they proceed
                 )
                 // This is the log message you were looking for
-                Log.d("MainActivity", "Participant registered successfully with demographics. ID: $participantId")
-                Toast.makeText(this@MainActivity, "Registration successful!", Toast.LENGTH_LONG).show()
+                Log.d("RegistrationActivity", "Participant registered successfully with demographics. ID: $participantId")
+                Toast.makeText(this@RegistrationActivity, "Registration successful!", Toast.LENGTH_LONG).show()
                 //
-                val intent = Intent(this@MainActivity, ThresholdActivity::class.java)
+                val intent = Intent(this@RegistrationActivity, ThresholdActivity::class.java)
                 startActivity(intent)
                 finish()
 
             } catch (e: Exception) {
-                Log.e("MainActivity", "Error registering participant", e)
-                Toast.makeText(this@MainActivity, "Registration failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Log.e("RegistrationActivity", "Error registering participant", e)
+                Toast.makeText(this@RegistrationActivity, "Registration failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -151,8 +150,8 @@ class MainActivity : AppCompatActivity() {
             if (isRegistered) {
                 val participant = repository.getCurrentParticipant()
                 participant?.let {
-                    Log.d("MainActivity", "Participant already registered: ${it.participantId}")
-                    Toast.makeText(this@MainActivity, "Welcome back! You're already registered.", Toast.LENGTH_SHORT).show()
+                    Log.d("RegistrationActivity", "Participant already registered: ${it.participantId}")
+                    Toast.makeText(this@RegistrationActivity, "Welcome back! You're already registered.", Toast.LENGTH_SHORT).show()
                     // You might want to navigate to the next screen here as well
                 }
             }
@@ -164,7 +163,7 @@ class MainActivity : AppCompatActivity() {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        val uploadWorkRequest = PeriodicWorkRequestBuilder<DataUploaderWorker>(15, TimeUnit.MINUTES)
+        val uploadWorkRequest = PeriodicWorkRequestBuilder<DataUploadWorker>(15, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .build()
 

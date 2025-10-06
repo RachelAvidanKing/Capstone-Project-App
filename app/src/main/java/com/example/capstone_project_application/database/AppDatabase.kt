@@ -18,8 +18,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 )
 abstract class AppDatabase : RoomDatabase() {
 
-    abstract fun movementDataDao(): MovementDataDao
-    abstract fun participantDao(): ParticipantDao
+    abstract fun movementDataDao(): MovementLocalDataSource
+    abstract fun participantDao(): ParticipantLocalDataSource
 
     companion object {
         @Volatile

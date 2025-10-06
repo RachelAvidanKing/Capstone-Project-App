@@ -10,7 +10,7 @@ import androidx.room.Update
  * Data Access Object (DAO) for the Participant entity.
  */
 @Dao
-interface ParticipantDao {
+interface ParticipantLocalDataSource {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(participant: Participant)

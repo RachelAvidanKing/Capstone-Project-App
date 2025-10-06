@@ -10,7 +10,7 @@ import androidx.room.Query
  * This interface defines all the database operations (queries).
  */
 @Dao
-interface MovementDataDao {
+interface MovementLocalDataSource {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(dataPoint: MovementDataPoint)

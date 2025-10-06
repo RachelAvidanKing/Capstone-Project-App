@@ -13,7 +13,7 @@ import android.util.Log
  * A Worker class to handle uploading unsynced data from Room to Firebase Firestore.
  * This uses WorkManager to ensure the task runs reliably, even if the app is closed.
  */
-class DataUploaderWorker(
+class DataUploadWorker(
     appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
@@ -24,7 +24,7 @@ class DataUploaderWorker(
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d("DataUploaderWorker", "Starting data upload job")
+                Log.d("DataUploadWorker", "Starting data upload job")
 
                 // Upload participants first - always try this
                 uploadParticipants()
@@ -32,10 +32,10 @@ class DataUploaderWorker(
                 // Then upload movement data (if any exists)
                 uploadMovementData()
 
-                Log.d("DataUploaderWorker", "Upload job completed successfully")
+                Log.d("DataUploadWorker", "Upload job completed successfully")
                 Result.success()
             } catch (e: Exception) {
-                Log.e("DataUploaderWorker", "Upload failed", e)
+                Log.e("DataUploadWorker", "Upload failed", e)
                 Result.retry()
             }
         }
@@ -45,7 +45,7 @@ class DataUploaderWorker(
         val unsyncedParticipants = roomDb.participantDao().getUnsyncedParticipants()
 
         if (unsyncedParticipants.isNotEmpty()) {
-            Log.d("DataUploaderWorker", "Uploading ${unsyncedParticipants.size} participants")
+            Log.d("DataUploadWorker", "Uploading ${unsyncedParticipants.size} participants")
 
             for (participant in unsyncedParticipants) {
                 val participantMap = mapOf(
@@ -70,7 +70,7 @@ class DataUploaderWorker(
             val participantIds = unsyncedParticipants.map { it.participantId }
             roomDb.participantDao().markAsUploaded(participantIds)
 
-            Log.d("DataUploaderWorker", "Participants uploaded successfully")
+            Log.d("DataUploadWorker", "Participants uploaded successfully")
         }
     }
 
@@ -78,7 +78,7 @@ class DataUploaderWorker(
         val unsyncedData = roomDb.movementDataDao().getAllUnsyncedData()
 
         if (unsyncedData.isNotEmpty()) {
-            Log.d("DataUploaderWorker", "Uploading ${unsyncedData.size} movement data points")
+            Log.d("DataUploadWorker", "Uploading ${unsyncedData.size} movement data points")
 
             // Group by participant for efficient upload
             val dataByParticipant = unsyncedData.groupBy { it.participantId }
@@ -114,7 +114,7 @@ class DataUploaderWorker(
             val syncedIds = unsyncedData.map { it.id }
             roomDb.movementDataDao().markAsUploaded(syncedIds)
 
-            Log.d("DataUploaderWorker", "Movement data uploaded successfully")
+            Log.d("DataUploadWorker", "Movement data uploaded successfully")
         }
     }
 }
