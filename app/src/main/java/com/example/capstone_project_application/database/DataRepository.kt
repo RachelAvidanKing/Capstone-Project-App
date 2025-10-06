@@ -127,4 +127,8 @@ class DataRepository(private val database: AppDatabase, private val context: Con
             database.participantDao().getParticipant(getCurrentParticipantId())
         }
     }
+
+    suspend fun updateParticipant(participant: Participant) {
+        database.participantDao().update(participant)
+    }
 }
