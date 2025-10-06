@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
                 //
 
                 // For testing: trigger an immediate upload after registration
-                triggerImmediateUpload()
+                //triggerImmediateUpload()
 
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error registering participant", e)

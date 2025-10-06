@@ -27,6 +27,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".logic.ThresholdActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CapstoneProjectApplication" />
+
     </application>
 
 </manifest>
