@@ -89,11 +89,11 @@ class RegistrationActivity : AppCompatActivity() {
                 val participantId = repository.registerParticipant(
                     age = selectedAge,
                     gender = selectedGender,
-                    hasGlasses = hasGlasses, // Pass the hasGlasses value
-                    hasAttentionDeficit = hasAttentionDeficit, // Pass the new value
+                    hasGlasses = hasGlasses,
+                    hasAttentionDeficit = hasAttentionDeficit,
                     consentGiven = true // Assuming consent is given when they proceed
                 )
-                // This is the log message you were looking for
+
                 Log.d("RegistrationActivity", "Participant registered successfully with demographics. ID: $participantId")
                 Toast.makeText(this@RegistrationActivity, "Registration successful!", Toast.LENGTH_LONG).show()
                 //

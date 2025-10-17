@@ -1,5 +1,6 @@
 package com.example.capstone_project_application.logic
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -22,7 +23,7 @@ class ThresholdActivity : AppCompatActivity() {
     private val repository by lazy { DataRepository(database, this) }
 
     // Algorithm constants
-    private val N_TOTAL = 100
+    private val N_TOTAL = 10//0
     private val n0 = 140
     private val HUES = listOf(141, 142, 143, 144, 145, 150, 155, 160, 165, 175)
     private val MAX_PER_HUE = 10
@@ -230,13 +231,8 @@ class ThresholdActivity : AppCompatActivity() {
     }
 
     private fun navigateToNextActivity() {
-        // TODO: Replace with your actual next activity
-        // Example:
-        // val intent = Intent(this, NextActivity::class.java)
-        // startActivity(intent)
-        // finish()
-
-        Toast.makeText(this, "Navigate to next activity (not implemented yet)", Toast.LENGTH_SHORT).show()
+        val intent = Intent(this@ThresholdActivity, TargetActivity::class.java)
+        startActivity(intent)
         finish()
     }
 }

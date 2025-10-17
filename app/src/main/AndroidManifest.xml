@@ -33,6 +33,10 @@
             android:exported="false"
             android:theme="@style/Theme.CapstoneProjectApplication" />
 
+        <activity
+            android:name=".logic.TargetActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CapstoneProjectApplication" />
     </application>
 
 </manifest>
