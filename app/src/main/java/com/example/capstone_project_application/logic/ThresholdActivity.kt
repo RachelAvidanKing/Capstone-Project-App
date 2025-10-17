@@ -23,7 +23,7 @@ class ThresholdActivity : AppCompatActivity() {
     private val repository by lazy { DataRepository(database, this) }
 
     // Algorithm constants
-    private val N_TOTAL = 10//0
+    private val N_TOTAL = 20//0 ///Change to 10 for testing...
     private val n0 = 140
     private val HUES = listOf(141, 142, 143, 144, 145, 150, 155, 160, 165, 175)
     private val MAX_PER_HUE = 10
@@ -206,13 +206,12 @@ class ThresholdActivity : AppCompatActivity() {
 
                     WorkScheduler.triggerImmediateUpload(this@ThresholdActivity)
 
-                    // Show results
-                    val message = if (jndThreshold != null) {
-                        "Experiment complete! Your JND threshold: Blue $jndThreshold"
-                    } else {
-                        "Experiment complete! No threshold detected (performance > 50% for all hues)"
-                    }
-                    Toast.makeText(this@ThresholdActivity, message, Toast.LENGTH_LONG).show()
+                    // Show completion message WITHOUT revealing the threshold to the user
+                    Toast.makeText(
+                        this@ThresholdActivity,
+                        "Threshold test complete! Moving to next phase...",
+                        Toast.LENGTH_LONG
+                    ).show()
 
                     // Show "Next" button to continue to the next activity
                     binding.btnNext.visibility = android.view.View.VISIBLE
