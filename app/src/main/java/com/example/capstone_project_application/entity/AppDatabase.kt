@@ -1,4 +1,4 @@
-package com.example.capstone_project_application.database
+package com.example.capstone_project_application.entity
 
 import android.content.Context
 import androidx.room.Database

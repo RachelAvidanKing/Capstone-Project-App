@@ -1,4 +1,4 @@
-package com.example.capstone_project_application.database
+package com.example.capstone_project_application.entity
 
 import androidx.room.Dao
 import androidx.room.Insert

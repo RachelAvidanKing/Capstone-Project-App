@@ -1,7 +1,10 @@
-package com.example.capstone_project_application.database
+package com.example.capstone_project_application.control
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.capstone_project_application.entity.AppDatabase
+import com.example.capstone_project_application.entity.MovementDataPoint
+import com.example.capstone_project_application.entity.Participant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
