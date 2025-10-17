@@ -1,7 +1,7 @@
 package com.example.capstone_project_application
 
 import android.app.Application
-import com.example.capstone_project_application.database.AppDatabase
+import com.example.capstone_project_application.entity.AppDatabase
 
 /**
  * Custom Application class for initializing app-wide components

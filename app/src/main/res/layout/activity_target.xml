@@ -7,19 +7,6 @@
     android:layout_height="match_parent"
     android:background="@color/white">
 
-    <!-- Trial Counter (similar to ThresholdActivity) -->
-    <TextView
-        android:id="@+id/tvTrialCounter"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Trial 0 of 10"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
-
     <!-- עיגולים -->
     <!-- שמאל למעלה -->
     <View

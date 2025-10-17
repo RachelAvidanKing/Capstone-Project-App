@@ -1,4 +1,4 @@
-package com.example.capstone_project_application.logic
+package com.example.capstone_project_application.control
 
 import android.content.Context
 import android.util.Log
@@ -6,7 +6,7 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.example.capstone_project_application.database.DataUploadWorker
+import com.example.capstone_project_application.control.DataUploadWorker
 
 object WorkScheduler {
     private const val TAG = "WorkScheduler"

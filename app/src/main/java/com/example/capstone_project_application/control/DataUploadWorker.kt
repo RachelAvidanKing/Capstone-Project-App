@@ -1,13 +1,15 @@
-package com.example.capstone_project_application.database
+package com.example.capstone_project_application.control
 
 import android.content.Context
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.example.capstone_project_application.entity.AppDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import android.util.Log
+import kotlin.collections.iterator
 
 /**
  * A Worker class to handle uploading unsynced data from Room to Firebase Firestore.
@@ -19,7 +21,7 @@ class DataUploadWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val firestore = FirebaseFirestore.getInstance()
-    private val roomDb = AppDatabase.getDatabase(appContext)
+    private val roomDb = AppDatabase.Companion.getDatabase(appContext)
 
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {

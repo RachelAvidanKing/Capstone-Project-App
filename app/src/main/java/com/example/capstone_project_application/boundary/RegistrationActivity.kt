@@ -1,5 +1,6 @@
-package com.example.capstone_project_application
+package com.example.capstone_project_application.boundary
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
@@ -15,19 +16,17 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.example.capstone_project_application.database.AppDatabase
-import com.example.capstone_project_application.database.DataRepository
-import com.example.capstone_project_application.database.DataUploadWorker
-import com.example.capstone_project_application.logic.ThresholdActivity
+import com.example.capstone_project_application.R
+import com.example.capstone_project_application.entity.AppDatabase
+import com.example.capstone_project_application.control.DataRepository
+import com.example.capstone_project_application.control.DataUploadWorker
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
-import android.content.Intent
-
 
 class RegistrationActivity : AppCompatActivity() {
 
     // Get a reference to the database and repository
-    private val database by lazy { AppDatabase.getDatabase(this) }
+    private val database by lazy { AppDatabase.Companion.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
 
     // UI Components
@@ -40,7 +39,7 @@ class RegistrationActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_registration)
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -151,8 +150,6 @@ class RegistrationActivity : AppCompatActivity() {
                 val participant = repository.getCurrentParticipant()
                 participant?.let {
                     Log.d("RegistrationActivity", "Participant already registered: ${it.participantId}")
-                    Toast.makeText(this@RegistrationActivity, "Welcome back! You're already registered.", Toast.LENGTH_SHORT).show()
-                    // You might want to navigate to the next screen here as well
                 }
             }
         }
