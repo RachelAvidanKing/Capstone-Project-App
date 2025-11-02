@@ -40,11 +40,11 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
 dependencies {
-
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
@@ -68,6 +68,12 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     // Optional: Firebase Auth if you want user authentication later
     implementation("com.google.firebase:firebase-auth-ktx")
+    // Add the core App Check dependency
+    implementation("com.google.firebase:firebase-appcheck")
+    // Production Provider (for your specific research tablet)
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    // Debug Provider (for your development/virtual device)
+    implementation("com.google.firebase:firebase-appcheck-debug")
 
     // WorkManager for background tasks (data upload)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
