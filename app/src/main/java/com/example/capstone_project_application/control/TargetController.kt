@@ -27,7 +27,7 @@ data class TargetTrialState(
 class TargetController(private val jndThreshold: Int) {
 
     private val HUES = listOf(141, 142, 143, 144, 145, 150, 155, 160, 165, 175)
-    private val TOTAL_TRIALS = 10
+    private val TOTAL_TRIALS = 15
     private var currentTrialNumber = 0
 
     // Using a special, non-conflicting number to represent our new obvious color.
@@ -37,9 +37,9 @@ class TargetController(private val jndThreshold: Int) {
 
     init {
         val trials = mutableListOf<TrialType>()
-        repeat(4) { trials.add(TrialType.PRE_JND) }
-        repeat(3) { trials.add(TrialType.PRE_SUPRA) }
-        repeat(3) { trials.add(TrialType.CONCURRENT_SUPRA) }
+        repeat(5) { trials.add(TrialType.PRE_JND) }
+        repeat(5) { trials.add(TrialType.PRE_SUPRA) }
+        repeat(5) { trials.add(TrialType.CONCURRENT_SUPRA) }
         trials.shuffle()
         trialSequence = trials
     }
