@@ -96,8 +96,8 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.65"
-        app:layout_constraintVertical_bias="0.25"/>
+        app:layout_constraintHorizontal_bias="0.78"
+        app:layout_constraintVertical_bias="0.34"/>
 
     <View
         android:id="@+id/square3"
@@ -108,8 +108,8 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintHorizontal_bias="0.75"
-        app:layout_constraintVertical_bias="0.8"/>
+        app:layout_constraintHorizontal_bias="0.68"
+        app:layout_constraintVertical_bias="0.7"/>
 
     <View
         android:id="@+id/square4"
@@ -120,7 +120,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintHorizontal_bias="0.45"
+        app:layout_constraintHorizontal_bias="0.30"
         app:layout_constraintVertical_bias="0.7"/>
 
     <!-- X במרכז -->
