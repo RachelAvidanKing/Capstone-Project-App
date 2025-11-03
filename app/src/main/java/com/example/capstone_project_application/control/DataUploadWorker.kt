@@ -9,11 +9,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import kotlin.collections.iterator
+import org.json.JSONArray
 
 /**
  * A Worker class to handle uploading unsynced data from Room to Firebase Firestore.
- * This uses WorkManager to ensure the task runs reliably, even if the app is closed.
  */
 class DataUploadWorker(
     appContext: Context,
@@ -21,23 +20,29 @@ class DataUploadWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val firestore = FirebaseFirestore.getInstance()
-    private val roomDb = AppDatabase.Companion.getDatabase(appContext)
+    private val roomDb = AppDatabase.getDatabase(appContext)
+
+    companion object {
+        private const val TAG = "DataUploadWorker"
+    }
 
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d("DataUploadWorker", "Starting data upload job")
+                Log.d(TAG, "════════════════════════════════════════")
+                Log.d(TAG, "STARTING DATA UPLOAD JOB")
+                Log.d(TAG, "════════════════════════════════════════")
 
-                // Upload participants first - always try this
                 uploadParticipants()
-
-                // Then upload movement data (if any exists)
+                uploadTargetTrials()
                 uploadMovementData()
 
-                Log.d("DataUploadWorker", "Upload job completed successfully")
+                Log.d(TAG, "════════════════════════════════════════")
+                Log.d(TAG, "UPLOAD JOB COMPLETED SUCCESSFULLY")
+                Log.d(TAG, "════════════════════════════════════════")
                 Result.success()
             } catch (e: Exception) {
-                Log.e("DataUploadWorker", "Upload failed", e)
+                Log.e(TAG, "✗✗✗ UPLOAD FAILED ✗✗✗", e)
                 Result.retry()
             }
         }
@@ -46,77 +51,149 @@ class DataUploadWorker(
     private suspend fun uploadParticipants() {
         val unsyncedParticipants = roomDb.participantDao().getUnsyncedParticipants()
 
-        if (unsyncedParticipants.isNotEmpty()) {
-            Log.d("DataUploadWorker", "Uploading ${unsyncedParticipants.size} participants")
+        if (unsyncedParticipants.isEmpty()) {
+            Log.d(TAG, "→ No participants to upload")
+            return
+        }
 
-            for (participant in unsyncedParticipants) {
-                val participantMap = mapOf(
-                    "participantId" to participant.participantId,
-                    "age" to participant.age,
-                    "gender" to participant.gender,
-                    "hasGlasses" to participant.hasGlasses,
-                    "hasAttentionDeficit" to participant.hasAttentionDeficit,
-                    "consentGiven" to participant.consentGiven,
-                    "registrationTimestamp" to participant.registrationTimestamp,
-                    "jndThreshold" to participant.jndThreshold
+        Log.d(TAG, "→ Uploading ${unsyncedParticipants.size} participant(s)")
+
+        for (participant in unsyncedParticipants) {
+            val participantMap = mapOf(
+                "participantId" to participant.participantId,
+                "age" to participant.age,
+                "gender" to participant.gender,
+                "hasGlasses" to participant.hasGlasses,
+                "hasAttentionDeficit" to participant.hasAttentionDeficit,
+                "consentGiven" to participant.consentGiven,
+                "registrationTimestamp" to participant.registrationTimestamp,
+                "jndThreshold" to participant.jndThreshold
+            )
+
+            firestore.collection("participants")
+                .document(participant.participantId)
+                .set(participantMap)
+                .await()
+
+            Log.d(TAG, "  ✓ Participant ${participant.participantId.take(8)}... uploaded")
+        }
+
+        val participantIds = unsyncedParticipants.map { it.participantId }
+        roomDb.participantDao().markAsUploaded(participantIds)
+
+        Log.d(TAG, "✓ All participants uploaded and marked as synced")
+    }
+
+    private suspend fun uploadTargetTrials() {
+        val unsyncedTrials = roomDb.targetTrialDao().getUnsyncedTrials()
+
+        if (unsyncedTrials.isEmpty()) {
+            Log.d(TAG, "→ No target trials to upload")
+            return
+        }
+
+        Log.d(TAG, "→ Uploading ${unsyncedTrials.size} target trial(s)")
+
+        val trialsByParticipant = unsyncedTrials.groupBy { it.participantId }
+
+        for ((participantId, trials) in trialsByParticipant) {
+            val participantRef = firestore.collection("participants").document(participantId)
+            Log.d(TAG, "  → Uploading ${trials.size} trials for participant ${participantId.take(8)}...")
+
+            for (trial in trials) {
+                val movementPathList = mutableListOf<Map<String, Any>>()
+                try {
+                    val pathArray = JSONArray(trial.movementPath)
+                    for (i in 0 until pathArray.length()) {
+                        val point = pathArray.getJSONObject(i)
+                        movementPathList.add(mapOf(
+                            "x" to point.getDouble("x"),
+                            "y" to point.getDouble("y"),
+                            "t" to point.getLong("t")
+                        ))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "    ✗ Error parsing movement path for trial ${trial.trialNumber}", e)
+                }
+
+                val trialMap = mutableMapOf<String, Any?>(
+                    "trialNumber" to trial.trialNumber,
+                    "trialType" to trial.trialType,
+                    "targetIndex" to trial.targetIndex,
+                    "selectedIndex" to trial.selectedIndex,
+                    "isCorrect" to trial.isCorrect,
+                    "trialStartTimestamp" to trial.trialStartTimestamp,
+                    "responseTimestamp" to trial.responseTimestamp,
+                    "totalResponseTime" to trial.totalResponseTime,
+                    "movementPath" to movementPathList,
+                    "pathLength" to trial.pathLength,
+                    "averageSpeed" to trial.averageSpeed,
+                    "initialHue" to trial.initialHue,
+                    "goBeepTimestamp" to trial.goBeepTimestamp
                 )
 
-                // Upload to Firestore
-                firestore.collection("participants")
-                    .document(participant.participantId)
-                    .set(participantMap) // Use the map here
+                trial.firstMovementTimestamp?.let { trialMap["firstMovementTimestamp"] = it }
+                trial.targetReachedTimestamp?.let { trialMap["targetReachedTimestamp"] = it }
+                trial.reactionTime?.let { trialMap["reactionTime"] = it }
+                trial.movementTime?.let { trialMap["movementTime"] = it }
+                trial.finalHue?.let { trialMap["finalHue"] = it }
+
+                participantRef.collection("target_trials")
+                    .add(trialMap)
                     .await()
+
+                Log.d(TAG, "    ✓ Trial ${trial.trialNumber} uploaded")
             }
-
-            // Mark as uploaded
-            val participantIds = unsyncedParticipants.map { it.participantId }
-            roomDb.participantDao().markAsUploaded(participantIds)
-
-            Log.d("DataUploadWorker", "Participants uploaded successfully")
         }
+
+        val syncedIds = unsyncedTrials.map { it.id }
+        roomDb.targetTrialDao().markAsUploaded(syncedIds)
+
+        Log.d(TAG, "✓ All target trials uploaded and marked as synced")
     }
 
     private suspend fun uploadMovementData() {
         val unsyncedData = roomDb.movementDataDao().getAllUnsyncedData()
 
-        if (unsyncedData.isNotEmpty()) {
-            Log.d("DataUploadWorker", "Uploading ${unsyncedData.size} movement data points")
+        if (unsyncedData.isEmpty()) {
+            Log.d(TAG, "→ No movement data to upload")
+            return
+        }
 
-            // Group by participant for efficient upload
-            val dataByParticipant = unsyncedData.groupBy { it.participantId }
+        Log.d(TAG, "→ Uploading ${unsyncedData.size} movement data point(s)")
 
-            // Upload data to Firestore
-            for ((participantId, movementDataList) in dataByParticipant) {
-                val participantRef = firestore.collection("participants").document(participantId)
+        val dataByParticipant = unsyncedData.groupBy { it.participantId }
 
-                // Upload each movement data point
-                for (movementData in movementDataList) {
-                    // Convert to map for Firestore (removing Room-specific fields)
-                    val dataMap = mapOf(
-                        "timestamp" to movementData.timestamp,
-                        "latitude" to movementData.latitude,
-                        "longitude" to movementData.longitude,
-                        "altitude" to movementData.altitude,
-                        "speed" to movementData.speed,
-                        "accelX" to movementData.accelX,
-                        "accelY" to movementData.accelY,
-                        "accelZ" to movementData.accelZ,
-                        "gyroX" to movementData.gyroX,
-                        "gyroY" to movementData.gyroY,
-                        "gyroZ" to movementData.gyroZ
-                    )
+        for ((participantId, movementDataList) in dataByParticipant) {
+            val participantRef = firestore.collection("participants").document(participantId)
+            Log.d(TAG, "  → Uploading ${movementDataList.size} data points for participant ${participantId.take(8)}...")
 
-                    participantRef.collection("movement_data")
-                        .add(dataMap)
-                        .await()
-                }
+            for (movementData in movementDataList) {
+                val dataMap = mapOf(
+                    "timestamp" to movementData.timestamp,
+                    "latitude" to movementData.latitude,
+                    "longitude" to movementData.longitude,
+                    "altitude" to movementData.altitude,
+                    "speed" to movementData.speed,
+                    "accelX" to movementData.accelX,
+                    "accelY" to movementData.accelY,
+                    "accelZ" to movementData.accelZ,
+                    "gyroX" to movementData.gyroX,
+                    "gyroY" to movementData.gyroY,
+                    "gyroZ" to movementData.gyroZ
+                )
+
+                participantRef.collection("movement_data")
+                    .add(dataMap)
+                    .await()
             }
 
-            // Mark data as synced in the local database
-            val syncedIds = unsyncedData.map { it.id }
-            roomDb.movementDataDao().markAsUploaded(syncedIds)
-
-            Log.d("DataUploadWorker", "Movement data uploaded successfully")
+            Log.d(TAG, "  ✓ Movement data uploaded for participant ${participantId.take(8)}...")
         }
+
+        val syncedIds = unsyncedData.map { it.id }
+        roomDb.movementDataDao().markAsUploaded(syncedIds)
+
+        Log.d(TAG, "✓ All movement data uploaded and marked as synced")
     }
 }
