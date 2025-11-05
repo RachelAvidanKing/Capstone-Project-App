@@ -25,6 +25,7 @@ class MovementTracker {
     private val movementPath = mutableListOf<Triple<Float, Float, Long>>()
 
     private var targetBounds: Rect? = null
+    private var targetIndex: Int = -1 // Store which target this bounds represents
 
     companion object {
         private const val MOVEMENT_THRESHOLD_PX = 5f // Reduced from 15 for better sensitivity
@@ -45,15 +46,17 @@ class MovementTracker {
         hasMovementStarted = false
         movementPath.clear()
         targetBounds = null
+        targetIndex = -1
         Log.d(TAG, "Tracker reset for new trial")
     }
 
     /**
      * Set the target bounds for this trial
      */
-    fun setTargetBounds(left: Int, top: Int, right: Int, bottom: Int) {
+    fun setTargetBounds(left: Int, top: Int, right: Int, bottom: Int, index: Int) {
         targetBounds = Rect(left, top, right, bottom)
-        Log.d(TAG, "Target bounds set: $targetBounds")
+        targetIndex = index
+        Log.d(TAG, "Target bounds set for index $index: $targetBounds")
     }
 
     /**
@@ -152,6 +155,25 @@ class MovementTracker {
             averageSpeed = averageSpeed,
             goBeepTimestamp = goBeepTime
         )
+    }
+
+    /**
+     * Check if there was significant movement during this trial
+     */
+    fun hasSignificantMovement(): Boolean {
+        return hasMovementStarted && movementPath.size > 2
+    }
+
+    /**
+     * Get which target was reached (based on target bounds)
+     * Returns the target index if a target was reached, -1 otherwise
+     */
+    fun getReachedTargetIndex(): Int {
+        return if (targetReachedTime != null) {
+            targetIndex // Return the index of the target that was reached
+        } else {
+            -1 // No target was reached
+        }
     }
 
     private fun calculatePathLength(): Float {

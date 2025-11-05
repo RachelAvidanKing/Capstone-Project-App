@@ -1,5 +1,6 @@
 package com.example.capstone_project_application.boundary
 
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Bundle
@@ -9,6 +10,7 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -65,7 +67,6 @@ class TargetActivity : AppCompatActivity() {
 
         toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
 
-        // Set up global touch tracking on the root view
         setupGlobalTouchTracking()
 
         lifecycleScope.launch {
@@ -95,15 +96,66 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
+    override fun onBackPressed() {
+        if (isTrialInProgress) {
+            Toast.makeText(this, "Please complete the current trial", Toast.LENGTH_SHORT).show()
+            return
+        }
+        showExitConfirmationDialog()
+    }
+
+    private fun showExitConfirmationDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Exit Experiment?")
+            .setMessage("Are you sure you want to exit? Your progress will be saved and you can continue later.")
+            .setPositiveButton("Exit and Save") { _, _ ->
+                handleExit()
+            }
+            .setNegativeButton("Continue Experiment", null)
+            .show()
+    }
+
+    private fun handleExit() {
+        lifecycleScope.launch {
+            try {
+                // Stop any ongoing trials
+                isTrialInProgress = false
+                handler.removeCallbacksAndMessages(null)
+
+                // Upload current data
+                WorkScheduler.triggerImmediateUpload(this@TargetActivity)
+
+                Toast.makeText(
+                    this@TargetActivity,
+                    "Progress saved. You can continue from where you left off.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                // Clear current session
+                repository.clearCurrentParticipant()
+
+                // Return to login
+                val intent = Intent(this@TargetActivity, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during exit", e)
+                Toast.makeText(
+                    this@TargetActivity,
+                    "Error saving progress",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         toneGenerator?.release()
         handler.removeCallbacksAndMessages(null)
     }
 
-    /**
-     * Intercept touch events at the activity level to ensure we capture all movement
-     */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.action and MotionEvent.ACTION_MASK) {
             MotionEvent.ACTION_DOWN -> {
@@ -126,14 +178,9 @@ class TargetActivity : AppCompatActivity() {
                 }
             }
         }
-
-        // Always pass the event to the superclass
         return super.dispatchTouchEvent(ev)
     }
 
-    /**
-     * Set up global touch tracking that doesn't interfere with click events
-     */
     private fun setupGlobalTouchTracking() {
         val rootView = findViewById<View>(android.R.id.content)
 
@@ -154,20 +201,11 @@ class TargetActivity : AppCompatActivity() {
                 }
                 MotionEvent.ACTION_UP -> {
                     Log.d(TAG, "Touch UP at (${event.rawX}, ${event.rawY})")
-                    // Process final position
                     if (isTrialInProgress) {
                         movementTracker.processMovement(event.rawX, event.rawY)
                     }
                 }
-                MotionEvent.ACTION_POINTER_DOWN -> {
-                    Log.d(TAG, "ACTION_POINTER_DOWN")
-                }
-                MotionEvent.ACTION_POINTER_UP -> {
-                    Log.d(TAG, "ACTION_POINTER_UP")
-                }
             }
-            // CRITICAL: Return false to not consume the event
-            // This allows click listeners on circles to still work
             false
         }
     }
@@ -185,10 +223,8 @@ class TargetActivity : AppCompatActivity() {
         trialStartTime = System.currentTimeMillis()
         movementTracker.reset()
 
-        // Set target bounds for movement tracking
         if (currentTrialState.targetCircleIndex in circles.indices) {
             val targetCircle = circles[currentTrialState.targetCircleIndex]
-            // Post to ensure the view is laid out
             targetCircle.post {
                 val location = IntArray(2)
                 targetCircle.getLocationOnScreen(location)
@@ -196,11 +232,10 @@ class TargetActivity : AppCompatActivity() {
                     location[0],
                     location[1],
                     location[0] + targetCircle.width,
-                    location[1] + targetCircle.height
+                    location[1] + targetCircle.height,
+                    currentTrialState.targetCircleIndex
                 )
-                Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}: " +
-                        "x=${location[0]}-${location[0] + targetCircle.width}, " +
-                        "y=${location[1]}-${location[1] + targetCircle.height}")
+                Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}")
             }
         }
 
@@ -257,18 +292,30 @@ class TargetActivity : AppCompatActivity() {
     private fun handleCircleClick(clickedIndex: Int) {
         if (!isTrialInProgress) return
 
+        val reachedTargetIndex = movementTracker.getReachedTargetIndex()
+        val hasMovementData = movementTracker.hasSignificantMovement()
+
         val responseTime = System.currentTimeMillis()
-        val isCorrect = controller.checkUserResponse(clickedIndex, currentTrialState.targetCircleIndex)
+        val isCorrect = controller.checkUserResponse(reachedTargetIndex, currentTrialState.targetCircleIndex)
+
+        if (hasMovementData && reachedTargetIndex != clickedIndex) {
+            Log.w(TAG, "⚠️ CHEAT DETECTED: Moved to circle $reachedTargetIndex but clicked circle $clickedIndex")
+            Toast.makeText(this, "Please click the target you reached", Toast.LENGTH_SHORT).show()
+
+            isTrialInProgress = false
+            saveTrialData(clickedIndex, isCorrect, responseTime, isCheated = true)
+            handler.postDelayed({ startNewTrial() }, 1500)
+            return
+        }
+
         Log.d(TAG, "Circle $clickedIndex clicked. Correct: $isCorrect")
 
         isTrialInProgress = false
-
         saveTrialData(clickedIndex, isCorrect, responseTime)
-
         handler.postDelayed({ startNewTrial() }, 1000)
     }
 
-    private fun saveTrialData(selectedIndex: Int, isCorrect: Boolean, responseTime: Long) {
+    private fun saveTrialData(selectedIndex: Int, isCorrect: Boolean, responseTime: Long, isCheated: Boolean = false) {
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
@@ -276,8 +323,8 @@ class TargetActivity : AppCompatActivity() {
 
                 Log.d(TAG, "Saving trial data - Movement captured: " +
                         "hasFirstMovement=${movementData.firstMovementTimestamp != null}, " +
-                        "pathPoints=${movementData.movementPath.length}, " +
-                        "pathLength=${movementData.pathLength}")
+                        "pathPoints=${movementData.movementPath.length}" +
+                        if (isCheated) " ⚠️ CHEATED" else "")
 
                 val trialResult = TargetTrialResult(
                     participantId = participantId,
@@ -285,7 +332,7 @@ class TargetActivity : AppCompatActivity() {
                     trialType = currentTrialState.trialType.name,
                     targetIndex = currentTrialState.targetCircleIndex,
                     selectedIndex = selectedIndex,
-                    isCorrect = isCorrect,
+                    isCorrect = isCorrect && !isCheated,
                     trialStartTimestamp = trialStartTime,
                     firstMovementTimestamp = movementData.firstMovementTimestamp,
                     targetReachedTimestamp = movementData.targetReachedTimestamp,
@@ -302,7 +349,7 @@ class TargetActivity : AppCompatActivity() {
                 )
 
                 database.targetTrialDao().insert(trialResult)
-                Log.d(TAG, "✓ Trial ${currentTrialState.trialCount} data saved to Room database")
+                Log.d(TAG, "✓ Trial ${currentTrialState.trialCount} data saved")
 
             } catch (e: Exception) {
                 Log.e(TAG, "✗ Error saving trial data", e)
@@ -339,9 +386,9 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun completeExperiment() {
-        Log.d(TAG, "════════════════════════════════════════")
+        Log.d(TAG, "══════════════════════════════════════")
         Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
-        Log.d(TAG, "════════════════════════════════════════")
+        Log.d(TAG, "══════════════════════════════════════")
 
         lifecycleScope.launch {
             try {
@@ -352,11 +399,8 @@ class TargetActivity : AppCompatActivity() {
                 Log.d(TAG, "→ Triggering Firebase upload...")
                 WorkScheduler.triggerImmediateUpload(this@TargetActivity)
 
-                Toast.makeText(this@TargetActivity, "Experiment complete! Uploading data...", Toast.LENGTH_LONG).show()
-
-                handler.postDelayed({
-                    finish()
-                }, 2000)
+                // Show completion dialog
+                showCompletionDialog()
 
             } catch (e: Exception) {
                 Log.e(TAG, "✗ Error completing experiment", e)
@@ -364,5 +408,20 @@ class TargetActivity : AppCompatActivity() {
                 finish()
             }
         }
+    }
+
+    private fun showCompletionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Experiment Complete!")
+            .setMessage("Thank you for your participation. Your data has been saved and will be uploaded.")
+            .setPositiveButton("Finish") { _, _ ->
+                repository.clearCurrentParticipant()
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            }
+            .setCancelable(false)
+            .show()
     }
 }
