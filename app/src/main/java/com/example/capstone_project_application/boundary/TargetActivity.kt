@@ -1,5 +1,6 @@
 package com.example.capstone_project_application.boundary
 
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Bundle
@@ -8,7 +9,9 @@ import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Button
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -18,6 +21,7 @@ import com.example.capstone_project_application.control.TargetController
 import com.example.capstone_project_application.control.TargetTrialState
 import com.example.capstone_project_application.control.TrialType
 import com.example.capstone_project_application.control.WorkScheduler
+import com.example.capstone_project_application.control.InactivityHelper
 import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.entity.TargetTrialResult
@@ -32,11 +36,14 @@ class TargetActivity : AppCompatActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
+    private lateinit var inactivityHelper: InactivityHelper
 
     private var toneGenerator: ToneGenerator? = null
     private val handler = Handler(Looper.getMainLooper())
     private var isTrialInProgress = false
     private var trialStartTime: Long = 0
+
+    private lateinit var btnExit: Button
 
     private val BEEP_INTERVAL_MS = 700L
     private val PRE_BEEP_OFFSET_MS = 350L
@@ -63,9 +70,15 @@ class TargetActivity : AppCompatActivity() {
             findViewById(R.id.circleBottomLeft), findViewById(R.id.circleBottomRight)
         )
 
-        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+        btnExit = findViewById(R.id.btnExit)
+        btnExit.setOnClickListener {
+            inactivityHelper.resetTimer()
+            showExitConfirmationDialog()
+        }
 
-        // Set up global touch tracking on the root view
+        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+        inactivityHelper = InactivityHelper(this, repository)
+
         setupGlobalTouchTracking()
 
         lifecycleScope.launch {
@@ -87,11 +100,90 @@ class TargetActivity : AppCompatActivity() {
 
             Log.d(TAG, "JND Threshold found: ${participant.jndThreshold}")
             controller = TargetController(participant.jndThreshold!!)
+            inactivityHelper.resetTimer()
             startNewTrial()
         }
 
         circles.forEachIndexed { index, circle ->
-            circle.setOnClickListener { handleCircleClick(index) }
+            circle.setOnClickListener {
+                inactivityHelper.resetTimer()
+                handleCircleClick(index)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.resetTimer()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.stopTimer()
+        }
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.resetTimer()
+        }
+    }
+
+    override fun onBackPressed() {
+        // Custom handling
+        // Allow back button to exit even during trial
+        showExitConfirmationDialog()
+    }
+
+
+    private fun showExitConfirmationDialog() {
+        // Allow exit at any time, even during trial
+        AlertDialog.Builder(this)
+            .setTitle("Exit Experiment?")
+            .setMessage("Your target trial progress will NOT be saved. You will need to restart this experiment when you return.")
+            .setPositiveButton("Exit") { _, _ ->
+                handleExit()
+            }
+            .setNegativeButton("Continue Experiment", null)
+            .show()
+    }
+
+    private fun handleExit() {
+        lifecycleScope.launch {
+            try {
+                // Stop any ongoing trials
+                isTrialInProgress = false
+                handler.removeCallbacksAndMessages(null)
+
+                // Clear incomplete trial data
+                repository.clearIncompleteTrialData()
+
+                Toast.makeText(
+                    this@TargetActivity,
+                    "Exiting. Your JND threshold is saved.",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                // Clear current session
+                repository.clearCurrentParticipant()
+
+                // Return to login
+                val intent = Intent(this@TargetActivity, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during exit", e)
+                Toast.makeText(
+                    this@TargetActivity,
+                    "Error during exit",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 
@@ -99,11 +191,11 @@ class TargetActivity : AppCompatActivity() {
         super.onDestroy()
         toneGenerator?.release()
         handler.removeCallbacksAndMessages(null)
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.stopTimer()
+        }
     }
 
-    /**
-     * Intercept touch events at the activity level to ensure we capture all movement
-     */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.action and MotionEvent.ACTION_MASK) {
             MotionEvent.ACTION_DOWN -> {
@@ -126,14 +218,9 @@ class TargetActivity : AppCompatActivity() {
                 }
             }
         }
-
-        // Always pass the event to the superclass
         return super.dispatchTouchEvent(ev)
     }
 
-    /**
-     * Set up global touch tracking that doesn't interfere with click events
-     */
     private fun setupGlobalTouchTracking() {
         val rootView = findViewById<View>(android.R.id.content)
 
@@ -144,7 +231,7 @@ class TargetActivity : AppCompatActivity() {
                     movementTracker.recordOrigin(event.rawX, event.rawY)
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    Log.v(TAG, "ACTION_MOVE detected at (${event.rawX}, ${event.rawY}), trial in progress: $isTrialInProgress")
+                    Log.v(TAG, "ACTION_MOVE detected at (${event.rawX}, ${event.rawY})")
                     if (isTrialInProgress) {
                         val moved = movementTracker.processMovement(event.rawX, event.rawY)
                         if (moved) {
@@ -154,20 +241,11 @@ class TargetActivity : AppCompatActivity() {
                 }
                 MotionEvent.ACTION_UP -> {
                     Log.d(TAG, "Touch UP at (${event.rawX}, ${event.rawY})")
-                    // Process final position
                     if (isTrialInProgress) {
                         movementTracker.processMovement(event.rawX, event.rawY)
                     }
                 }
-                MotionEvent.ACTION_POINTER_DOWN -> {
-                    Log.d(TAG, "ACTION_POINTER_DOWN")
-                }
-                MotionEvent.ACTION_POINTER_UP -> {
-                    Log.d(TAG, "ACTION_POINTER_UP")
-                }
             }
-            // CRITICAL: Return false to not consume the event
-            // This allows click listeners on circles to still work
             false
         }
     }
@@ -185,10 +263,8 @@ class TargetActivity : AppCompatActivity() {
         trialStartTime = System.currentTimeMillis()
         movementTracker.reset()
 
-        // Set target bounds for movement tracking
         if (currentTrialState.targetCircleIndex in circles.indices) {
             val targetCircle = circles[currentTrialState.targetCircleIndex]
-            // Post to ensure the view is laid out
             targetCircle.post {
                 val location = IntArray(2)
                 targetCircle.getLocationOnScreen(location)
@@ -196,11 +272,10 @@ class TargetActivity : AppCompatActivity() {
                     location[0],
                     location[1],
                     location[0] + targetCircle.width,
-                    location[1] + targetCircle.height
+                    location[1] + targetCircle.height,
+                    currentTrialState.targetCircleIndex
                 )
-                Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}: " +
-                        "x=${location[0]}-${location[0] + targetCircle.width}, " +
-                        "y=${location[1]}-${location[1] + targetCircle.height}")
+                Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}")
             }
         }
 
@@ -257,18 +332,30 @@ class TargetActivity : AppCompatActivity() {
     private fun handleCircleClick(clickedIndex: Int) {
         if (!isTrialInProgress) return
 
+        val reachedTargetIndex = movementTracker.getReachedTargetIndex()
+        val hasMovementData = movementTracker.hasSignificantMovement()
+
         val responseTime = System.currentTimeMillis()
-        val isCorrect = controller.checkUserResponse(clickedIndex, currentTrialState.targetCircleIndex)
+        val isCorrect = controller.checkUserResponse(reachedTargetIndex, currentTrialState.targetCircleIndex)
+
+        if (hasMovementData && reachedTargetIndex != clickedIndex) {
+            Log.w(TAG, "⚠️ CHEAT DETECTED: Moved to circle $reachedTargetIndex but clicked circle $clickedIndex")
+            Toast.makeText(this, "Please click the target you reached", Toast.LENGTH_SHORT).show()
+
+            isTrialInProgress = false
+            saveTrialData(clickedIndex, isCorrect, responseTime, isCheated = true)
+            handler.postDelayed({ startNewTrial() }, 1500)
+            return
+        }
+
         Log.d(TAG, "Circle $clickedIndex clicked. Correct: $isCorrect")
 
         isTrialInProgress = false
-
         saveTrialData(clickedIndex, isCorrect, responseTime)
-
         handler.postDelayed({ startNewTrial() }, 1000)
     }
 
-    private fun saveTrialData(selectedIndex: Int, isCorrect: Boolean, responseTime: Long) {
+    private fun saveTrialData(selectedIndex: Int, isCorrect: Boolean, responseTime: Long, isCheated: Boolean = false) {
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
@@ -276,8 +363,8 @@ class TargetActivity : AppCompatActivity() {
 
                 Log.d(TAG, "Saving trial data - Movement captured: " +
                         "hasFirstMovement=${movementData.firstMovementTimestamp != null}, " +
-                        "pathPoints=${movementData.movementPath.length}, " +
-                        "pathLength=${movementData.pathLength}")
+                        "pathPoints=${movementData.movementPath.length}" +
+                        if (isCheated) " ⚠️ CHEATED" else "")
 
                 val trialResult = TargetTrialResult(
                     participantId = participantId,
@@ -285,7 +372,7 @@ class TargetActivity : AppCompatActivity() {
                     trialType = currentTrialState.trialType.name,
                     targetIndex = currentTrialState.targetCircleIndex,
                     selectedIndex = selectedIndex,
-                    isCorrect = isCorrect,
+                    isCorrect = isCorrect && !isCheated,
                     trialStartTimestamp = trialStartTime,
                     firstMovementTimestamp = movementData.firstMovementTimestamp,
                     targetReachedTimestamp = movementData.targetReachedTimestamp,
@@ -302,7 +389,7 @@ class TargetActivity : AppCompatActivity() {
                 )
 
                 database.targetTrialDao().insert(trialResult)
-                Log.d(TAG, "✓ Trial ${currentTrialState.trialCount} data saved to Room database")
+                Log.d(TAG, "✓ Trial ${currentTrialState.trialCount} data saved")
 
             } catch (e: Exception) {
                 Log.e(TAG, "✗ Error saving trial data", e)
@@ -339,24 +426,25 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun completeExperiment() {
-        Log.d(TAG, "════════════════════════════════════════")
+        Log.d(TAG, "══════════════════════════════════════")
         Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
-        Log.d(TAG, "════════════════════════════════════════")
+        Log.d(TAG, "══════════════════════════════════════")
+
+        // DON'T disable exit button - keep it functional
 
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
                 val trialCount = database.targetTrialDao().getTrialCountForParticipant(participantId)
-                Log.d(TAG, "✓ Total trials saved: $trialCount")
+                Log.d(TAG, "✓ Total trials saved locally: $trialCount")
 
+                // Upload ALL data to Firebase (experiment complete!)
                 Log.d(TAG, "→ Triggering Firebase upload...")
                 WorkScheduler.triggerImmediateUpload(this@TargetActivity)
 
-                Toast.makeText(this@TargetActivity, "Experiment complete! Uploading data...", Toast.LENGTH_LONG).show()
-
-                handler.postDelayed({
-                    finish()
-                }, 2000)
+                runOnUiThread {
+                    showCompletionDialog()
+                }
 
             } catch (e: Exception) {
                 Log.e(TAG, "✗ Error completing experiment", e)
@@ -364,5 +452,20 @@ class TargetActivity : AppCompatActivity() {
                 finish()
             }
         }
+    }
+
+    private fun showCompletionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Experiment Complete!")
+            .setMessage("Thank you for your participation! Your data has been saved and will be uploaded to our secure database.")
+            .setPositiveButton("Finish") { _, _ ->
+                repository.clearCurrentParticipant()
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            }
+            .setCancelable(false)
+            .show()
     }
 }

@@ -18,14 +18,22 @@
         android:theme="@style/Theme.CapstoneProjectApplication"
         tools:targetApi="31">
 
+
         <activity
-            android:name=".boundary.RegistrationActivity"
+            android:name=".boundary.LoginActivity"
             android:exported="true"
             android:theme="@style/Theme.CapstoneProjectApplication">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".boundary.RegistrationActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CapstoneProjectApplication">
         </activity>
 
         <activity
