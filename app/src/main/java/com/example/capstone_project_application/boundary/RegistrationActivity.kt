@@ -66,6 +66,7 @@ class RegistrationActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
+        // Custom handling
         showExitConfirmationDialog()
     }
 

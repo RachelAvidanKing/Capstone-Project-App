@@ -134,9 +134,11 @@ class TargetActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
+        // Custom handling
         // Allow back button to exit even during trial
         showExitConfirmationDialog()
     }
+
 
     private fun showExitConfirmationDialog() {
         // Allow exit at any time, even during trial

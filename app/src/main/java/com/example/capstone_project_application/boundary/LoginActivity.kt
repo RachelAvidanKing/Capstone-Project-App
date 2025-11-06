@@ -63,6 +63,7 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onBackPressed() {
         showExitAppDialog()
+        // Don't call super.onBackPressed() because we're handling it with the dialog
     }
 
     private fun showExitAppDialog() {
@@ -80,20 +81,20 @@ class LoginActivity : AppCompatActivity() {
         try {
             if (isReturningUser) {
                 // Show loading with progress dialog instead of toast
-                val progressDialog = runOnUiThread {
-                    val dialog = AlertDialog.Builder(this)
+                var progressDialog: AlertDialog? = null
+                runOnUiThread {
+                    progressDialog = AlertDialog.Builder(this)
                         .setTitle("Please Wait")
                         .setMessage("Checking registration...")
                         .setCancelable(false)
                         .create()
-                    dialog.show()
-                    dialog
+                    progressDialog?.show()
                 }
 
                 val participant = repository.fetchParticipantFromFirebase(participantId)
 
                 runOnUiThread {
-                    progressDialog.dismiss()
+                    progressDialog?.dismiss()
                 }
 
                 if (participant == null) {

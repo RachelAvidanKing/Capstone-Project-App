@@ -7,13 +7,17 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.capstone_project_application.boundary.LoginActivity
+import kotlinx.coroutines.launch
 
 /**
  * Helper class to handle user inactivity and auto-logout
+ * Activity must be an AppCompatActivity to use lifecycleScope
  */
 class InactivityHelper(
-    private val activity: Activity,
+    private val activity: AppCompatActivity,
     private val repository: DataRepository
 ) {
     private val handler = Handler(Looper.getMainLooper())
@@ -90,26 +94,43 @@ class InactivityHelper(
 
         warningDialog?.dismiss()
 
-        // Clear incomplete data
-        kotlinx.coroutines.GlobalScope.launch {
+        // Clear incomplete data using activity's lifecycleScope
+        activity.lifecycleScope.launch {
             try {
                 repository.clearIncompleteTrialData()
                 repository.clearCurrentParticipant()
+
+                // Show toast and navigate on main thread
+                activity.runOnUiThread {
+                    Toast.makeText(
+                        activity,
+                        "Logged out due to inactivity",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Navigate to login
+                    val intent = Intent(activity, LoginActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    activity.startActivity(intent)
+                    activity.finish()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during auto-logout cleanup", e)
+
+                // Still navigate even if cleanup fails
+                activity.runOnUiThread {
+                    Toast.makeText(
+                        activity,
+                        "Logged out due to inactivity",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    val intent = Intent(activity, LoginActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    activity.startActivity(intent)
+                    activity.finish()
+                }
             }
         }
-
-        Toast.makeText(
-            activity,
-            "Logged out due to inactivity",
-            Toast.LENGTH_LONG
-        ).show()
-
-        // Navigate to login
-        val intent = Intent(activity, LoginActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        activity.startActivity(intent)
-        activity.finish()
     }
 }
