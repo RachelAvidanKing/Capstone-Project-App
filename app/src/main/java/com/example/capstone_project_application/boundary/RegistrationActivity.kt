@@ -6,37 +6,32 @@ import android.util.Log
 import android.widget.Button
 import android.widget.RadioGroup
 import android.widget.Toast
-import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import com.example.capstone_project_application.R
 import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.control.DataRepository
-import com.example.capstone_project_application.control.DataUploadWorker
+import com.example.capstone_project_application.control.InactivityHelper
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 
 class RegistrationActivity : AppCompatActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
+    private lateinit var inactivityHelper: InactivityHelper
 
     private lateinit var rgGender: RadioGroup
     private lateinit var rgAge: RadioGroup
     private lateinit var rgEye: RadioGroup
     private lateinit var rgAttentionDeficit: RadioGroup
     private lateinit var btnNext: Button
+    private lateinit var btnExit: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContentView(R.layout.activity_registration)
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -45,8 +40,33 @@ class RegistrationActivity : AppCompatActivity() {
             insets
         }
 
+        inactivityHelper = InactivityHelper(this, repository)
         initializeViews()
-        setupPeriodicDataUpload()
+        inactivityHelper.resetTimer()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        inactivityHelper.resetTimer()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        inactivityHelper.stopTimer()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        inactivityHelper.resetTimer()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        inactivityHelper.stopTimer()
+    }
+
+    override fun onBackPressed() {
+        showExitConfirmationDialog()
     }
 
     private fun initializeViews() {
@@ -55,10 +75,38 @@ class RegistrationActivity : AppCompatActivity() {
         rgEye = findViewById(R.id.rgEye)
         rgAttentionDeficit = findViewById(R.id.rgAttentionDeficit)
         btnNext = findViewById(R.id.btnNext)
+        btnExit = findViewById(R.id.btnExit)
 
         btnNext.setOnClickListener {
+            inactivityHelper.resetTimer()
             handleNextButtonClick()
         }
+
+        btnExit.setOnClickListener {
+            inactivityHelper.resetTimer()
+            showExitConfirmationDialog()
+        }
+    }
+
+    private fun showExitConfirmationDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Exit Registration?")
+            .setMessage("Your progress will not be saved. You will need to start registration again.")
+            .setPositiveButton("Exit") { _, _ ->
+                handleExit()
+            }
+            .setNegativeButton("Continue", null)
+            .show()
+    }
+
+    private fun handleExit() {
+        // Clear the participant ID since they didn't complete registration
+        repository.clearCurrentParticipant()
+
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 
     private fun handleNextButtonClick() {
@@ -72,9 +120,12 @@ class RegistrationActivity : AppCompatActivity() {
             return
         }
 
+        btnNext.isEnabled = false
+        btnExit.isEnabled = false
+
         lifecycleScope.launch {
             try {
-                // Register participant using the ID that was set in LoginActivity
+                // Register participant locally
                 val participantId = repository.registerParticipant(
                     age = selectedAge,
                     gender = selectedGender,
@@ -83,20 +134,47 @@ class RegistrationActivity : AppCompatActivity() {
                     consentGiven = true
                 )
 
-                Log.d("RegistrationActivity", "Participant registered successfully. ID: $participantId")
-                Toast.makeText(this@RegistrationActivity, "Registration successful!", Toast.LENGTH_LONG).show()
+                // Upload demographics to Firebase (section complete)
+                val uploadSuccess = repository.uploadParticipantDemographics()
 
-                val intent = Intent(this@RegistrationActivity, ThresholdActivity::class.java)
-                startActivity(intent)
-                finish()
+                if (uploadSuccess) {
+                    Log.d("RegistrationActivity", "✓ Participant registered and uploaded. ID: $participantId")
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@RegistrationActivity,
+                            "Registration successful!",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        val intent = Intent(this@RegistrationActivity, ThresholdActivity::class.java)
+                        startActivity(intent)
+                        finish()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@RegistrationActivity,
+                            "Registration saved locally. Will upload when online.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        val intent = Intent(this@RegistrationActivity, ThresholdActivity::class.java)
+                        startActivity(intent)
+                        finish()
+                    }
+                }
 
             } catch (e: Exception) {
                 Log.e("RegistrationActivity", "Error registering participant", e)
-                Toast.makeText(
-                    this@RegistrationActivity,
-                    "Registration failed: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
+                runOnUiThread {
+                    Toast.makeText(
+                        this@RegistrationActivity,
+                        "Registration failed: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    btnNext.isEnabled = true
+                    btnExit.isEnabled = true
+                }
             }
         }
     }
@@ -134,21 +212,5 @@ class RegistrationActivity : AppCompatActivity() {
             R.id.rbAddNo -> false
             else -> null
         }
-    }
-
-    private fun setupPeriodicDataUpload() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val uploadWorkRequest = PeriodicWorkRequestBuilder<DataUploadWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "DataUploadWork",
-            ExistingPeriodicWorkPolicy.KEEP,
-            uploadWorkRequest
-        )
     }
 }

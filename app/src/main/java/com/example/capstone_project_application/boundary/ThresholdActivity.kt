@@ -15,9 +15,11 @@ import com.example.capstone_project_application.control.ThresholdController
 import com.example.capstone_project_application.control.ThresholdTrialState
 import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.control.DataRepository
+import com.example.capstone_project_application.control.InactivityHelper
 import com.example.capstone_project_application.boundary.TargetActivity
 import com.example.capstone_project_application.control.WorkScheduler
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class ThresholdActivity : AppCompatActivity() {
 
@@ -26,6 +28,7 @@ class ThresholdActivity : AppCompatActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
+    private lateinit var inactivityHelper: InactivityHelper
 
     private val hueToColorRes = mapOf(
         141 to R.color.blue_141, 142 to R.color.blue_142, 143 to R.color.blue_143,
@@ -40,39 +43,87 @@ class ThresholdActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         controller = ThresholdController()
+        inactivityHelper = InactivityHelper(this, repository)
 
-        binding.btnA.setOnClickListener { handleUserResponse("A") }
-        binding.btnB.setOnClickListener { handleUserResponse("B") }
+        binding.btnA.setOnClickListener {
+            inactivityHelper.resetTimer()
+            handleUserResponse("A")
+        }
+        binding.btnB.setOnClickListener {
+            inactivityHelper.resetTimer()
+            handleUserResponse("B")
+        }
+        binding.btnExit.setOnClickListener {
+            inactivityHelper.resetTimer()
+            showExitConfirmationDialog()
+        }
 
+        inactivityHelper.resetTimer()
         startNextTrial()
     }
 
+    override fun onResume() {
+        super.onResume()
+        inactivityHelper.resetTimer()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        inactivityHelper.stopTimer()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        inactivityHelper.resetTimer()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        inactivityHelper.stopTimer()
+    }
+
     override fun onBackPressed() {
-        // Prevent accidental exits - show confirmation dialog
         showExitConfirmationDialog()
     }
 
     private fun showExitConfirmationDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Exit Threshold Test?")
-            .setMessage("Are you sure you want to exit? Your progress will be saved.")
-            .setPositiveButton("Exit") { _, _ ->
-                handleExit()
-            }
-            .setNegativeButton("Continue Test", null)
-            .show()
+        // Check if threshold test is complete
+        val participant = runBlocking { repository.getCurrentParticipant() }
+
+        if (participant?.jndThreshold != null) {
+            // Threshold is complete - show different message
+            AlertDialog.Builder(this)
+                .setTitle("Exit?")
+                .setMessage("Your threshold test is complete and saved. You can continue to the main experiment or exit.")
+                .setPositiveButton("Exit") { _, _ ->
+                    handleExitAfterCompletion()
+                }
+                .setNegativeButton("Continue to Experiment", null)
+                .show()
+        } else {
+            // Threshold is incomplete
+            AlertDialog.Builder(this)
+                .setTitle("Exit Threshold Test?")
+                .setMessage("Your threshold test progress will NOT be saved. You will need to restart this test when you return.")
+                .setPositiveButton("Exit") { _, _ ->
+                    handleExit()
+                }
+                .setNegativeButton("Continue Test", null)
+                .show()
+        }
     }
 
     private fun handleExit() {
         lifecycleScope.launch {
             try {
-                // Upload current data
-                WorkScheduler.triggerImmediateUpload(this@ThresholdActivity)
+                // Clear incomplete trial data
+                repository.clearIncompleteTrialData()
 
+                // Demographics are already saved, no need to upload anything
                 Toast.makeText(
                     this@ThresholdActivity,
-                    "Progress saved. You can continue later.",
-                    Toast.LENGTH_LONG
+                    "Exiting. Your demographics are saved.",
+                    Toast.LENGTH_SHORT
                 ).show()
 
                 // Clear current session
@@ -87,9 +138,53 @@ class ThresholdActivity : AppCompatActivity() {
                 Log.e("ThresholdActivity", "Error during exit", e)
                 Toast.makeText(
                     this@ThresholdActivity,
-                    "Error saving progress",
+                    "Error during exit",
                     Toast.LENGTH_SHORT
                 ).show()
+            }
+        }
+    }
+
+    private fun handleExitAfterCompletion() {
+        lifecycleScope.launch {
+            try {
+                // Threshold is complete - but need to ensure JND was saved
+                val participant = repository.getCurrentParticipant()
+
+                if (participant?.jndThreshold != null) {
+                    // JND is already saved, safe to logout
+                    repository.clearCurrentParticipant()
+
+                    Toast.makeText(
+                        this@ThresholdActivity,
+                        "Your progress is saved. You can continue later.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    // JND wasn't saved yet - save it now before exiting
+                    val jndThreshold = controller.calculateJNDThreshold()
+                    val updatedParticipant = participant?.copy(jndThreshold = jndThreshold)
+                    if (updatedParticipant != null) {
+                        repository.updateParticipant(updatedParticipant)
+                        repository.uploadParticipantDemographics()
+                        Log.d("ThresholdActivity", "JND saved during exit: $jndThreshold")
+                    }
+
+                    repository.clearCurrentParticipant()
+
+                    Toast.makeText(
+                        this@ThresholdActivity,
+                        "Threshold saved. You can continue later.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                val intent = Intent(this@ThresholdActivity, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            } catch (e: Exception) {
+                Log.e("ThresholdActivity", "Error during exit after completion", e)
             }
         }
     }
@@ -123,6 +218,7 @@ class ThresholdActivity : AppCompatActivity() {
     private fun completeExperiment() {
         binding.btnA.isEnabled = false
         binding.btnB.isEnabled = false
+        // DON'T disable exit button - allow exit even after completion
 
         val jndThreshold = controller.calculateJNDThreshold()
         Log.d("ThresholdActivity", "Calculated JND Threshold: $jndThreshold")
@@ -138,34 +234,34 @@ class ThresholdActivity : AppCompatActivity() {
             if (participant != null) {
                 val updatedParticipant = participant.copy(jndThreshold = jndThreshold)
                 repository.updateParticipant(updatedParticipant)
-                Log.d("ThresholdActivity", "JND Threshold saved for participant ${participant.participantId}")
+                Log.d("ThresholdActivity", "JND Threshold saved locally: ${participant.participantId}")
 
-                // Upload the updated participant data
-                WorkScheduler.triggerImmediateUpload(this@ThresholdActivity)
+                // Upload updated participant data with JND threshold (section complete)
+                val uploadSuccess = repository.uploadParticipantDemographics()
 
-                Toast.makeText(
-                    this@ThresholdActivity,
-                    "Threshold test complete!",
-                    Toast.LENGTH_LONG
-                ).show()
+                if (uploadSuccess) {
+                    Log.d("ThresholdActivity", "✓ JND Threshold uploaded to Firebase")
+                } else {
+                    Log.w("ThresholdActivity", "⚠ JND saved locally, will upload when online")
+                }
 
-                binding.btnNext.visibility = android.view.View.VISIBLE
-                binding.btnNext.setOnClickListener { navigateToNextActivity() }
+                runOnUiThread {
+                    Toast.makeText(
+                        this@ThresholdActivity,
+                        "Threshold test complete!",
+                        Toast.LENGTH_SHORT
+                    ).show()
 
-                // Add exit button
-                addExitButton()
+                    binding.btnNext.visibility = android.view.View.VISIBLE
+                    binding.btnNext.setOnClickListener { navigateToNextActivity() }
+                    binding.tvTitle.text = "Test Complete!"
+                }
             } else {
                 Log.e("ThresholdActivity", "No participant found in database")
             }
         } catch (e: Exception) {
             Log.e("ThresholdActivity", "Error saving threshold", e)
         }
-    }
-
-    private fun addExitButton() {
-        // You can add a button in the XML or create one programmatically
-        // For now, we'll just enable the back button to work as exit
-        binding.tvTitle.text = "Test Complete!\nContinue or Exit"
     }
 
     private fun navigateToNextActivity() {

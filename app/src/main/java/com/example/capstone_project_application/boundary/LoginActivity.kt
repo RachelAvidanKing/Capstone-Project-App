@@ -3,6 +3,7 @@ package com.example.capstone_project_application.boundary
 import android.content.Intent
 import android.os.Bundle
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.capstone_project_application.R
@@ -22,6 +23,7 @@ class LoginActivity : AppCompatActivity() {
         val etIdNumber = findViewById<EditText>(R.id.etIdNumber)
         val rgRegistered = findViewById<RadioGroup>(R.id.rgRegistered)
         val btnContinue = findViewById<Button>(R.id.btnContinue)
+        val btnExitApp = findViewById<Button>(R.id.btnExitApp)
 
         btnContinue.setOnClickListener {
             val idNumber = etIdNumber.text.toString().trim()
@@ -47,25 +49,54 @@ class LoginActivity : AppCompatActivity() {
             val selectedRadio = findViewById<RadioButton>(selectedOptionId)
             val isReturningUser = selectedRadio.id == R.id.rbYes
 
-            // Disable button to prevent multiple clicks
             btnContinue.isEnabled = false
 
             lifecycleScope.launch {
                 handleLogin(idNumber, isReturningUser)
             }
         }
+
+        btnExitApp.setOnClickListener {
+            showExitAppDialog()
+        }
+    }
+
+    override fun onBackPressed() {
+        showExitAppDialog()
+    }
+
+    private fun showExitAppDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Exit Application?")
+            .setMessage("Are you sure you want to exit the app?")
+            .setPositiveButton("Exit") { _, _ ->
+                finishAffinity() // Closes the app completely
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private suspend fun handleLogin(participantId: String, isReturningUser: Boolean) {
         try {
             if (isReturningUser) {
-                // Try to fetch participant from Firebase
-                Toast.makeText(this, "Checking registration...", Toast.LENGTH_SHORT).show()
+                // Show loading with progress dialog instead of toast
+                val progressDialog = runOnUiThread {
+                    val dialog = AlertDialog.Builder(this)
+                        .setTitle("Please Wait")
+                        .setMessage("Checking registration...")
+                        .setCancelable(false)
+                        .create()
+                    dialog.show()
+                    dialog
+                }
 
                 val participant = repository.fetchParticipantFromFirebase(participantId)
 
+                runOnUiThread {
+                    progressDialog.dismiss()
+                }
+
                 if (participant == null) {
-                    // Participant not found in Firebase
                     runOnUiThread {
                         Toast.makeText(
                             this,
@@ -77,25 +108,30 @@ class LoginActivity : AppCompatActivity() {
                     return
                 }
 
-                // Save participant locally and set as current
+                // Check if experiment is already complete
+                val hasCompleted = repository.hasCompletedExperiment(participantId)
+                if (hasCompleted) {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this,
+                            "You have already completed this experiment. Thank you for your participation!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        findViewById<Button>(R.id.btnContinue).isEnabled = true
+                    }
+                    return
+                }
+
                 repository.setExistingParticipant(participant)
 
                 runOnUiThread {
+                    // Check what stage they're at
                     if (participant.jndThreshold != null) {
-                        // Has completed JND test, go to target activity
-                        Toast.makeText(
-                            this,
-                            "Welcome back! Continuing to experiment...",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        // Has JND but hasn't completed target trials - go to target
                         navigateToTargetActivity()
                     } else {
-                        // Registered but hasn't completed JND test
-                        Toast.makeText(
-                            this,
-                            "Welcome back! Please complete the threshold test.",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        // Has demographics but no JND - go to threshold
+                        // They must redo threshold test from beginning
                         navigateToThresholdActivity()
                     }
                 }
@@ -115,11 +151,9 @@ class LoginActivity : AppCompatActivity() {
                     return
                 }
 
-                // New user - set participant ID and go to registration
                 repository.setParticipantId(participantId)
 
                 runOnUiThread {
-                    Toast.makeText(this, "Proceeding to registration...", Toast.LENGTH_SHORT).show()
                     navigateToRegistration()
                 }
             }

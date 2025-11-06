@@ -23,6 +23,7 @@ class DataRepository(private val database: AppDatabase, private val context: Con
 
     companion object {
         private const val TAG = "DataRepository"
+        private const val EXPECTED_TRIAL_COUNT = 15 // Total number of target trials
     }
 
     /**
@@ -44,7 +45,7 @@ class DataRepository(private val database: AppDatabase, private val context: Con
     }
 
     /**
-     * Fetch participant data from Firebase
+     * Fetch participant data from Firebase and check completion status
      * Returns null if participant doesn't exist
      */
     suspend fun fetchParticipantFromFirebase(participantId: String): Participant? {
@@ -73,7 +74,7 @@ class DataRepository(private val database: AppDatabase, private val context: Con
                     consentGiven = data["consentGiven"] as? Boolean ?: false,
                     registrationTimestamp = data["registrationTimestamp"] as? Long ?: 0L,
                     jndThreshold = (data["jndThreshold"] as? Long)?.toInt(),
-                    isUploaded = true // Data from Firebase is already uploaded
+                    isUploaded = true
                 )
 
                 Log.d(TAG, "Successfully fetched participant: $participantId, JND: ${participant.jndThreshold}")
@@ -86,14 +87,36 @@ class DataRepository(private val database: AppDatabase, private val context: Con
     }
 
     /**
+     * Check if participant has completed all target trials in Firebase
+     */
+    suspend fun hasCompletedExperiment(participantId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val trialsSnapshot = firestore.collection("participants")
+                    .document(participantId)
+                    .collection("target_trials")
+                    .get()
+                    .await()
+
+                val trialCount = trialsSnapshot.documents.size
+                val isComplete = trialCount >= EXPECTED_TRIAL_COUNT
+
+                Log.d(TAG, "Participant $participantId has $trialCount trials (complete: $isComplete)")
+                isComplete
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking experiment completion", e)
+                false
+            }
+        }
+    }
+
+    /**
      * Save an existing participant locally and set as current
      */
     suspend fun setExistingParticipant(participant: Participant) {
         withContext(Dispatchers.IO) {
-            // Save to local database
             database.participantDao().insert(participant)
 
-            // Set as current participant
             sharedPrefs.edit()
                 .putString("current_participant_id", participant.participantId)
                 .apply()
@@ -135,6 +158,43 @@ class DataRepository(private val database: AppDatabase, private val context: Con
     }
 
     /**
+     * Upload only participant demographics to Firebase
+     * Used when exiting registration page
+     */
+    suspend fun uploadParticipantDemographics(): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val participant = getCurrentParticipant() ?: return@withContext false
+
+                val participantMap = mapOf(
+                    "participantId" to participant.participantId,
+                    "age" to participant.age,
+                    "gender" to participant.gender,
+                    "hasGlasses" to participant.hasGlasses,
+                    "hasAttentionDeficit" to participant.hasAttentionDeficit,
+                    "consentGiven" to participant.consentGiven,
+                    "registrationTimestamp" to participant.registrationTimestamp,
+                    "jndThreshold" to participant.jndThreshold
+                )
+
+                firestore.collection("participants")
+                    .document(participant.participantId)
+                    .set(participantMap)
+                    .await()
+
+                val updatedParticipant = participant.copy(isUploaded = true)
+                database.participantDao().update(updatedParticipant)
+
+                Log.d(TAG, "✓ Participant demographics uploaded to Firebase")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "✗ Error uploading participant demographics", e)
+                false
+            }
+        }
+    }
+
+    /**
      * Clear current participant session (logout)
      */
     fun clearCurrentParticipant() {
@@ -142,6 +202,27 @@ class DataRepository(private val database: AppDatabase, private val context: Con
             .remove("current_participant_id")
             .apply()
         Log.d(TAG, "Current participant session cleared")
+    }
+
+    /**
+     * Delete incomplete local data (threshold/target trials that weren't completed)
+     */
+    suspend fun clearIncompleteTrialData() {
+        withContext(Dispatchers.IO) {
+            try {
+                val participantId = getCurrentParticipantId()
+
+                // Delete all local target trials (they weren't completed)
+                val trials = database.targetTrialDao().getTrialsForParticipant(participantId)
+                trials.forEach { trial ->
+                    database.targetTrialDao().delete(trial)
+                }
+
+                Log.d(TAG, "✓ Cleared ${trials.size} incomplete trial(s)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing incomplete data", e)
+            }
+        }
     }
 
     /**

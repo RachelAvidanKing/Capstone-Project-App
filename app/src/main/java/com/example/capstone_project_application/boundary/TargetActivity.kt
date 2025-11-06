@@ -9,6 +9,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -20,6 +21,7 @@ import com.example.capstone_project_application.control.TargetController
 import com.example.capstone_project_application.control.TargetTrialState
 import com.example.capstone_project_application.control.TrialType
 import com.example.capstone_project_application.control.WorkScheduler
+import com.example.capstone_project_application.control.InactivityHelper
 import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.entity.TargetTrialResult
@@ -34,11 +36,14 @@ class TargetActivity : AppCompatActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
+    private lateinit var inactivityHelper: InactivityHelper
 
     private var toneGenerator: ToneGenerator? = null
     private val handler = Handler(Looper.getMainLooper())
     private var isTrialInProgress = false
     private var trialStartTime: Long = 0
+
+    private lateinit var btnExit: Button
 
     private val BEEP_INTERVAL_MS = 700L
     private val PRE_BEEP_OFFSET_MS = 350L
@@ -65,7 +70,14 @@ class TargetActivity : AppCompatActivity() {
             findViewById(R.id.circleBottomLeft), findViewById(R.id.circleBottomRight)
         )
 
+        btnExit = findViewById(R.id.btnExit)
+        btnExit.setOnClickListener {
+            inactivityHelper.resetTimer()
+            showExitConfirmationDialog()
+        }
+
         toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+        inactivityHelper = InactivityHelper(this, repository)
 
         setupGlobalTouchTracking()
 
@@ -88,27 +100,50 @@ class TargetActivity : AppCompatActivity() {
 
             Log.d(TAG, "JND Threshold found: ${participant.jndThreshold}")
             controller = TargetController(participant.jndThreshold!!)
+            inactivityHelper.resetTimer()
             startNewTrial()
         }
 
         circles.forEachIndexed { index, circle ->
-            circle.setOnClickListener { handleCircleClick(index) }
+            circle.setOnClickListener {
+                inactivityHelper.resetTimer()
+                handleCircleClick(index)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.resetTimer()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.stopTimer()
+        }
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.resetTimer()
         }
     }
 
     override fun onBackPressed() {
-        if (isTrialInProgress) {
-            Toast.makeText(this, "Please complete the current trial", Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Allow back button to exit even during trial
         showExitConfirmationDialog()
     }
 
     private fun showExitConfirmationDialog() {
+        // Allow exit at any time, even during trial
         AlertDialog.Builder(this)
             .setTitle("Exit Experiment?")
-            .setMessage("Are you sure you want to exit? Your progress will be saved and you can continue later.")
-            .setPositiveButton("Exit and Save") { _, _ ->
+            .setMessage("Your target trial progress will NOT be saved. You will need to restart this experiment when you return.")
+            .setPositiveButton("Exit") { _, _ ->
                 handleExit()
             }
             .setNegativeButton("Continue Experiment", null)
@@ -122,13 +157,13 @@ class TargetActivity : AppCompatActivity() {
                 isTrialInProgress = false
                 handler.removeCallbacksAndMessages(null)
 
-                // Upload current data
-                WorkScheduler.triggerImmediateUpload(this@TargetActivity)
+                // Clear incomplete trial data
+                repository.clearIncompleteTrialData()
 
                 Toast.makeText(
                     this@TargetActivity,
-                    "Progress saved. You can continue from where you left off.",
-                    Toast.LENGTH_LONG
+                    "Exiting. Your JND threshold is saved.",
+                    Toast.LENGTH_SHORT
                 ).show()
 
                 // Clear current session
@@ -143,7 +178,7 @@ class TargetActivity : AppCompatActivity() {
                 Log.e(TAG, "Error during exit", e)
                 Toast.makeText(
                     this@TargetActivity,
-                    "Error saving progress",
+                    "Error during exit",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -154,6 +189,9 @@ class TargetActivity : AppCompatActivity() {
         super.onDestroy()
         toneGenerator?.release()
         handler.removeCallbacksAndMessages(null)
+        if (::inactivityHelper.isInitialized) {
+            inactivityHelper.stopTimer()
+        }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -191,7 +229,7 @@ class TargetActivity : AppCompatActivity() {
                     movementTracker.recordOrigin(event.rawX, event.rawY)
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    Log.v(TAG, "ACTION_MOVE detected at (${event.rawX}, ${event.rawY}), trial in progress: $isTrialInProgress")
+                    Log.v(TAG, "ACTION_MOVE detected at (${event.rawX}, ${event.rawY})")
                     if (isTrialInProgress) {
                         val moved = movementTracker.processMovement(event.rawX, event.rawY)
                         if (moved) {
@@ -390,17 +428,21 @@ class TargetActivity : AppCompatActivity() {
         Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
         Log.d(TAG, "══════════════════════════════════════")
 
+        // DON'T disable exit button - keep it functional
+
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
                 val trialCount = database.targetTrialDao().getTrialCountForParticipant(participantId)
-                Log.d(TAG, "✓ Total trials saved: $trialCount")
+                Log.d(TAG, "✓ Total trials saved locally: $trialCount")
 
+                // Upload ALL data to Firebase (experiment complete!)
                 Log.d(TAG, "→ Triggering Firebase upload...")
                 WorkScheduler.triggerImmediateUpload(this@TargetActivity)
 
-                // Show completion dialog
-                showCompletionDialog()
+                runOnUiThread {
+                    showCompletionDialog()
+                }
 
             } catch (e: Exception) {
                 Log.e(TAG, "✗ Error completing experiment", e)
@@ -413,7 +455,7 @@ class TargetActivity : AppCompatActivity() {
     private fun showCompletionDialog() {
         AlertDialog.Builder(this)
             .setTitle("Experiment Complete!")
-            .setMessage("Thank you for your participation. Your data has been saved and will be uploaded.")
+            .setMessage("Thank you for your participation! Your data has been saved and will be uploaded to our secure database.")
             .setPositiveButton("Finish") { _, _ ->
                 repository.clearCurrentParticipant()
                 val intent = Intent(this, LoginActivity::class.java)
