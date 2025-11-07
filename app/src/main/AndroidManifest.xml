@@ -45,6 +45,10 @@
             android:name=".boundary.TargetActivity"
             android:exported="false"
             android:theme="@style/Theme.CapstoneProjectApplication" />
-    </application>
 
+        <activity android:name=".boundary.CompletionActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize"
+            android:theme="@style/Theme.CapstoneProjectApplication"/>
+    </application>
 </manifest>

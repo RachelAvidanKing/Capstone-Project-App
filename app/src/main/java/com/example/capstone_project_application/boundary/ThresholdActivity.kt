@@ -45,11 +45,11 @@ class ThresholdActivity : AppCompatActivity() {
         controller = ThresholdController()
         inactivityHelper = InactivityHelper(this, repository)
 
-        binding.btnA.setOnClickListener {
+        binding.viewA.setOnClickListener {
             inactivityHelper.resetTimer()
             handleUserResponse("A")
         }
-        binding.btnB.setOnClickListener {
+        binding.viewB.setOnClickListener {
             inactivityHelper.resetTimer()
             handleUserResponse("B")
         }
@@ -217,9 +217,8 @@ class ThresholdActivity : AppCompatActivity() {
     }
 
     private fun completeExperiment() {
-        binding.btnA.isEnabled = false
-        binding.btnB.isEnabled = false
-        // DON'T disable exit button - allow exit even after completion
+        binding.viewA.isEnabled = false
+        binding.viewB.isEnabled = false
 
         val jndThreshold = controller.calculateJNDThreshold()
         Log.d("ThresholdActivity", "Calculated JND Threshold: $jndThreshold")

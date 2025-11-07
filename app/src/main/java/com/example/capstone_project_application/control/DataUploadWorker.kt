@@ -120,8 +120,6 @@ class DataUploadWorker(
                     "trialNumber" to trial.trialNumber,
                     "trialType" to trial.trialType,
                     "targetIndex" to trial.targetIndex,
-                    "selectedIndex" to trial.selectedIndex,
-                    "isCorrect" to trial.isCorrect,
                     "trialStartTimestamp" to trial.trialStartTimestamp,
                     "responseTimestamp" to trial.responseTimestamp,
                     "totalResponseTime" to trial.totalResponseTime,

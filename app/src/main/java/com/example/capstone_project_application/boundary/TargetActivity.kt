@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -44,13 +45,18 @@ class TargetActivity : AppCompatActivity() {
     private var trialStartTime: Long = 0
 
     private lateinit var btnExit: Button
+    private lateinit var centerX: TextView
+
+    // Track which circles are currently hovered
+    private val hoveredCircles = mutableSetOf<Int>()
 
     private val BEEP_INTERVAL_MS = 700L
     private val PRE_BEEP_OFFSET_MS = 350L
     private val NUM_BEEPS = 4
+    private val ENLARGED_SCALE = 1.3f // 30% larger when hovered
 
     private val hueToColorRes = mapOf(
-        999 to R.color.blue_obvious,
+        999 to R.color.turquoise_obvious, // Changed to turquoise for better visibility
         141 to R.color.blue_141, 142 to R.color.blue_142, 143 to R.color.blue_143,
         144 to R.color.blue_144, 145 to R.color.blue_145, 150 to R.color.blue_150,
         155 to R.color.blue_155, 160 to R.color.blue_160, 165 to R.color.blue_165,
@@ -70,7 +76,9 @@ class TargetActivity : AppCompatActivity() {
             findViewById(R.id.circleBottomLeft), findViewById(R.id.circleBottomRight)
         )
 
+        centerX = findViewById(R.id.centerX)
         btnExit = findViewById(R.id.btnExit)
+
         btnExit.setOnClickListener {
             inactivityHelper.resetTimer()
             showExitConfirmationDialog()
@@ -103,13 +111,6 @@ class TargetActivity : AppCompatActivity() {
             inactivityHelper.resetTimer()
             startNewTrial()
         }
-
-        circles.forEachIndexed { index, circle ->
-            circle.setOnClickListener {
-                inactivityHelper.resetTimer()
-                handleCircleClick(index)
-            }
-        }
     }
 
     override fun onResume() {
@@ -134,14 +135,10 @@ class TargetActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        // Custom handling
-        // Allow back button to exit even during trial
         showExitConfirmationDialog()
     }
 
-
     private fun showExitConfirmationDialog() {
-        // Allow exit at any time, even during trial
         AlertDialog.Builder(this)
             .setTitle("Exit Experiment?")
             .setMessage("Your target trial progress will NOT be saved. You will need to restart this experiment when you return.")
@@ -155,11 +152,8 @@ class TargetActivity : AppCompatActivity() {
     private fun handleExit() {
         lifecycleScope.launch {
             try {
-                // Stop any ongoing trials
                 isTrialInProgress = false
                 handler.removeCallbacksAndMessages(null)
-
-                // Clear incomplete trial data
                 repository.clearIncompleteTrialData()
 
                 Toast.makeText(
@@ -168,10 +162,8 @@ class TargetActivity : AppCompatActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
 
-                // Clear current session
                 repository.clearCurrentParticipant()
 
-                // Return to login
                 val intent = Intent(this@TargetActivity, LoginActivity::class.java)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 startActivity(intent)
@@ -199,22 +191,26 @@ class TargetActivity : AppCompatActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.action and MotionEvent.ACTION_MASK) {
             MotionEvent.ACTION_DOWN -> {
-                Log.d(TAG, "DISPATCH: Touch DOWN at (${ev.rawX}, ${ev.rawY})")
-                movementTracker.recordOrigin(ev.rawX, ev.rawY)
+                Log.d(TAG, "Touch DOWN at (${ev.rawX}, ${ev.rawY})")
+                if (isTrialInProgress) {
+                    movementTracker.recordOrigin(ev.rawX, ev.rawY)
+                    updateCenterXPosition(ev.rawX, ev.rawY)
+                }
             }
             MotionEvent.ACTION_MOVE -> {
-                Log.v(TAG, "DISPATCH: ACTION_MOVE at (${ev.rawX}, ${ev.rawY})")
                 if (isTrialInProgress) {
-                    val moved = movementTracker.processMovement(ev.rawX, ev.rawY)
-                    if (moved) {
-                        Log.d(TAG, "DISPATCH: ✓ Movement recorded")
-                    }
+                    movementTracker.processMovement(ev.rawX, ev.rawY)
+                    updateCenterXPosition(ev.rawX, ev.rawY)
+
+                    // Check which circles are being hovered
+                    updateHoveredCircles(ev.rawX, ev.rawY)
                 }
             }
             MotionEvent.ACTION_UP -> {
-                Log.d(TAG, "DISPATCH: Touch UP at (${ev.rawX}, ${ev.rawY})")
+                Log.d(TAG, "Touch UP at (${ev.rawX}, ${ev.rawY})")
                 if (isTrialInProgress) {
                     movementTracker.processMovement(ev.rawX, ev.rawY)
+                    handleTrialComplete()
                 }
             }
         }
@@ -223,31 +219,129 @@ class TargetActivity : AppCompatActivity() {
 
     private fun setupGlobalTouchTracking() {
         val rootView = findViewById<View>(android.R.id.content)
-
         rootView.setOnTouchListener { _, event ->
-            when (event.action and MotionEvent.ACTION_MASK) {
-                MotionEvent.ACTION_DOWN -> {
-                    Log.d(TAG, "Touch DOWN at (${event.rawX}, ${event.rawY})")
-                    movementTracker.recordOrigin(event.rawX, event.rawY)
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    Log.v(TAG, "ACTION_MOVE detected at (${event.rawX}, ${event.rawY})")
-                    if (isTrialInProgress) {
-                        val moved = movementTracker.processMovement(event.rawX, event.rawY)
-                        if (moved) {
-                            Log.d(TAG, "✓ Movement tracked: (${event.rawX}, ${event.rawY})")
-                        }
-                    }
-                }
-                MotionEvent.ACTION_UP -> {
-                    Log.d(TAG, "Touch UP at (${event.rawX}, ${event.rawY})")
-                    if (isTrialInProgress) {
-                        movementTracker.processMovement(event.rawX, event.rawY)
-                    }
-                }
-            }
             false
         }
+    }
+
+    private fun updateCenterXPosition(x: Float, y: Float) {
+        // Move the X to follow the touch
+        centerX.x = x - centerX.width / 2
+        centerX.y = y - centerX.height / 2
+    }
+
+    private fun resetCenterXPosition() {
+        // Reset X to center of screen
+        centerX.post {
+            val rootView = findViewById<View>(android.R.id.content)
+            centerX.x = (rootView.width - centerX.width) / 2f
+            centerX.y = (rootView.height - centerX.height) / 2f
+        }
+    }
+
+    private fun updateHoveredCircles(x: Float, y: Float) {
+        val newHoveredCircles = mutableSetOf<Int>()
+
+        // Check each circle to see if the cursor is over it
+        circles.forEachIndexed { index, circle ->
+            val location = IntArray(2)
+            circle.getLocationOnScreen(location)
+            val left = location[0]
+            val top = location[1]
+            val right = left + circle.width
+            val bottom = top + circle.height
+
+            if (x >= left && x <= right && y >= top && y <= bottom) {
+                newHoveredCircles.add(index)
+            }
+        }
+
+        // Enlarge newly hovered circles
+        newHoveredCircles.forEach { index ->
+            if (!hoveredCircles.contains(index)) {
+                enlargeCircle(index)
+            }
+        }
+
+        // Shrink circles that are no longer hovered
+        hoveredCircles.forEach { index ->
+            if (!newHoveredCircles.contains(index)) {
+                resetCircleSize(index)
+            }
+        }
+
+        hoveredCircles.clear()
+        hoveredCircles.addAll(newHoveredCircles)
+    }
+
+    private fun enlargeCircle(index: Int) {
+        if (index !in circles.indices) return
+
+        val circle = circles[index]
+        circle.animate()
+            .scaleX(ENLARGED_SCALE)
+            .scaleY(ENLARGED_SCALE)
+            .setDuration(100)
+            .start()
+    }
+
+    private fun resetCircleSize(index: Int) {
+        if (index !in circles.indices) return
+
+        val circle = circles[index]
+        circle.animate()
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(100)
+            .start()
+    }
+
+    private fun resetAllCircleSizes() {
+        circles.forEachIndexed { index, _ ->
+            resetCircleSize(index)
+        }
+        hoveredCircles.clear()
+    }
+
+    private fun handleTrialComplete() {
+        if (!isTrialInProgress) return
+
+        val correctTargetReached = movementTracker.hasReachedCorrectTarget()
+        val hasMovementData = movementTracker.hasSignificantMovement()
+
+        if (!hasMovementData) {
+            Log.w(TAG, "⚠️ No significant movement detected")
+            Toast.makeText(this, "Please move to the target before releasing", Toast.LENGTH_SHORT).show()
+
+            // Reset for retry
+            resetCenterXPosition()
+            resetAllCircleSizes()
+            return
+        }
+
+        if (!correctTargetReached) {
+            Log.w(TAG, "⚠️ Correct target not reached - trial continues")
+            Toast.makeText(this, "Please reach the correct target", Toast.LENGTH_SHORT).show()
+
+            // Reset cursor but keep trial going
+            resetCenterXPosition()
+            resetAllCircleSizes()
+            return
+        }
+
+        val responseTime = System.currentTimeMillis()
+
+        Log.d(TAG, "Trial complete - Correct target reached")
+
+        isTrialInProgress = false
+        saveTrialData(responseTime)
+
+        // Wait a moment before starting next trial
+        handler.postDelayed({
+            resetCenterXPosition()
+            resetAllCircleSizes()
+            startNewTrial()
+        }, 1500)
     }
 
     private fun startNewTrial() {
@@ -262,6 +356,8 @@ class TargetActivity : AppCompatActivity() {
         isTrialInProgress = true
         trialStartTime = System.currentTimeMillis()
         movementTracker.reset()
+        resetCenterXPosition()
+        resetAllCircleSizes()
 
         if (currentTrialState.targetCircleIndex in circles.indices) {
             val targetCircle = circles[currentTrialState.targetCircleIndex]
@@ -275,6 +371,20 @@ class TargetActivity : AppCompatActivity() {
                     location[1] + targetCircle.height,
                     currentTrialState.targetCircleIndex
                 )
+
+                // Also set ALL circle bounds for hover detection
+                circles.forEachIndexed { index, circle ->
+                    val loc = IntArray(2)
+                    circle.getLocationOnScreen(loc)
+                    movementTracker.addCircleBounds(
+                        index,
+                        loc[0],
+                        loc[1],
+                        loc[0] + circle.width,
+                        loc[1] + circle.height
+                    )
+                }
+
                 Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}")
             }
         }
@@ -283,7 +393,11 @@ class TargetActivity : AppCompatActivity() {
 
         updateTrialDisplay(currentTrialState)
         resetCirclesToNeutral()
-        startBeepAndTargetSequence()
+
+        // Add 1 second delay before beeps
+        handler.postDelayed({
+            startBeepAndTargetSequence()
+        }, 1000)
     }
 
     private fun startBeepAndTargetSequence() {
@@ -329,33 +443,7 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleCircleClick(clickedIndex: Int) {
-        if (!isTrialInProgress) return
-
-        val reachedTargetIndex = movementTracker.getReachedTargetIndex()
-        val hasMovementData = movementTracker.hasSignificantMovement()
-
-        val responseTime = System.currentTimeMillis()
-        val isCorrect = controller.checkUserResponse(reachedTargetIndex, currentTrialState.targetCircleIndex)
-
-        if (hasMovementData && reachedTargetIndex != clickedIndex) {
-            Log.w(TAG, "⚠️ CHEAT DETECTED: Moved to circle $reachedTargetIndex but clicked circle $clickedIndex")
-            Toast.makeText(this, "Please click the target you reached", Toast.LENGTH_SHORT).show()
-
-            isTrialInProgress = false
-            saveTrialData(clickedIndex, isCorrect, responseTime, isCheated = true)
-            handler.postDelayed({ startNewTrial() }, 1500)
-            return
-        }
-
-        Log.d(TAG, "Circle $clickedIndex clicked. Correct: $isCorrect")
-
-        isTrialInProgress = false
-        saveTrialData(clickedIndex, isCorrect, responseTime)
-        handler.postDelayed({ startNewTrial() }, 1000)
-    }
-
-    private fun saveTrialData(selectedIndex: Int, isCorrect: Boolean, responseTime: Long, isCheated: Boolean = false) {
+    private fun saveTrialData(responseTime: Long) {
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
@@ -363,16 +451,13 @@ class TargetActivity : AppCompatActivity() {
 
                 Log.d(TAG, "Saving trial data - Movement captured: " +
                         "hasFirstMovement=${movementData.firstMovementTimestamp != null}, " +
-                        "pathPoints=${movementData.movementPath.length}" +
-                        if (isCheated) " ⚠️ CHEATED" else "")
+                        "pathPoints=${movementData.movementPath.length}")
 
                 val trialResult = TargetTrialResult(
                     participantId = participantId,
                     trialNumber = currentTrialState.trialCount,
                     trialType = currentTrialState.trialType.name,
                     targetIndex = currentTrialState.targetCircleIndex,
-                    selectedIndex = selectedIndex,
-                    isCorrect = isCorrect && !isCheated,
                     trialStartTimestamp = trialStartTime,
                     firstMovementTimestamp = movementData.firstMovementTimestamp,
                     targetReachedTimestamp = movementData.targetReachedTimestamp,
@@ -413,8 +498,10 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun updateTrialDisplay(trialState: TargetTrialState) {
-        val trialCounter = findViewById<android.widget.TextView>(R.id.tvTrialCounter)
-        trialCounter?.text = "Trial ${trialState.trialCount} of ${trialState.totalTrials}"
+        val trialCounter = findViewById<TextView>(R.id.tvTrialCounter)
+        trialCounter?.text = "TRIAL ${trialState.trialCount} OF ${trialState.totalTrials}"
+        trialCounter?.textSize = 24f // Larger text
+        trialCounter?.setTypeface(null, android.graphics.Typeface.BOLD) // Bold
     }
 
     private fun playBeep() {
@@ -425,12 +512,12 @@ class TargetActivity : AppCompatActivity() {
         toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 300)
     }
 
-    private fun completeExperiment() {
-        Log.d(TAG, "══════════════════════════════════════")
-        Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
-        Log.d(TAG, "══════════════════════════════════════")
+    // File: TargetActivity.kt
 
-        // DON'T disable exit button - keep it functional
+    private fun completeExperiment() {
+        Log.d(TAG, "════════════════════════════════════════")
+        Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
+        Log.d(TAG, "════════════════════════════════════════")
 
         lifecycleScope.launch {
             try {
@@ -438,34 +525,19 @@ class TargetActivity : AppCompatActivity() {
                 val trialCount = database.targetTrialDao().getTrialCountForParticipant(participantId)
                 Log.d(TAG, "✓ Total trials saved locally: $trialCount")
 
-                // Upload ALL data to Firebase (experiment complete!)
                 Log.d(TAG, "→ Triggering Firebase upload...")
                 WorkScheduler.triggerImmediateUpload(this@TargetActivity)
 
-                runOnUiThread {
-                    showCompletionDialog()
-                }
-
             } catch (e: Exception) {
-                Log.e(TAG, "✗ Error completing experiment", e)
-                Toast.makeText(this@TargetActivity, "Error completing experiment", Toast.LENGTH_SHORT).show()
-                finish()
+                // Log the error but DO NOT stop the user flow with a Toast/finish()
+                Log.e(TAG, "✗ Background error during final data processing/upload trigger.", e)
             }
         }
-    }
 
-    private fun showCompletionDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Experiment Complete!")
-            .setMessage("Thank you for your participation! Your data has been saved and will be uploaded to our secure database.")
-            .setPositiveButton("Finish") { _, _ ->
-                repository.clearCurrentParticipant()
-                val intent = Intent(this, LoginActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
-                finish()
-            }
-            .setCancelable(false)
-            .show()
+        val intent = Intent(this@TargetActivity, CompletionActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+
+        finish()
     }
 }

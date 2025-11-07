@@ -27,7 +27,7 @@ data class TargetTrialState(
 class TargetController(private val jndThreshold: Int) {
 
     private val HUES = listOf(141, 142, 143, 144, 145, 150, 155, 160, 165, 175)
-    private val TOTAL_TRIALS = 15
+    private val TOTAL_TRIALS = 3
     private var currentTrialNumber = 0
 
     // Using a special, non-conflicting number to represent our new obvious color.
