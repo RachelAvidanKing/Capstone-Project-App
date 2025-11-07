@@ -45,7 +45,7 @@ object DebugHelper {
             val unsyncedTrials = db.targetTrialDao().getUnsyncedTrials()
             Log.d(TAG, "  → ${unsyncedTrials.size} unsynced")
             for (trial in unsyncedTrials.take(3)) {
-                Log.d(TAG, "    - Trial ${trial.trialNumber}: ${trial.trialType}, correct=${trial.isCorrect}, RT=${trial.reactionTime}ms")
+                Log.d(TAG, "    - Trial ${trial.trialNumber}: ${trial.trialType}, RT=${trial.reactionTime}ms")
             }
             if (unsyncedTrials.size > 3) {
                 Log.d(TAG, "    ... and ${unsyncedTrials.size - 3} more")

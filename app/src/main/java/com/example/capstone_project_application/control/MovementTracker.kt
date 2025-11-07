@@ -25,10 +25,13 @@ class MovementTracker {
     private val movementPath = mutableListOf<Triple<Float, Float, Long>>()
 
     private var targetBounds: Rect? = null
-    private var targetIndex: Int = -1 // Store which target this bounds represents
+    private var correctTargetIndex: Int = -1
+
+    // Store ALL circle bounds for hover detection
+    private val allCircleBounds = mutableMapOf<Int, Rect>()
 
     companion object {
-        private const val MOVEMENT_THRESHOLD_PX = 5f // Reduced from 15 for better sensitivity
+        private const val MOVEMENT_THRESHOLD_PX = 5f
         private const val TAG = "MovementTracker"
     }
 
@@ -46,17 +49,25 @@ class MovementTracker {
         hasMovementStarted = false
         movementPath.clear()
         targetBounds = null
-        targetIndex = -1
+        correctTargetIndex = -1
+        allCircleBounds.clear()
         Log.d(TAG, "Tracker reset for new trial")
     }
 
     /**
-     * Set the target bounds for this trial
+     * Set the correct target bounds for this trial
      */
     fun setTargetBounds(left: Int, top: Int, right: Int, bottom: Int, index: Int) {
         targetBounds = Rect(left, top, right, bottom)
-        targetIndex = index
-        Log.d(TAG, "Target bounds set for index $index: $targetBounds")
+        correctTargetIndex = index
+        Log.d(TAG, "Correct target bounds set for index $index: $targetBounds")
+    }
+
+    /**
+     * Add bounds for a circle (for hover detection)
+     */
+    fun addCircleBounds(index: Int, left: Int, top: Int, right: Int, bottom: Int) {
+        allCircleBounds[index] = Rect(left, top, right, bottom)
     }
 
     /**
@@ -106,11 +117,11 @@ class MovementTracker {
         if (hasMovementStarted) {
             movementPath.add(Triple(x, y, currentTime))
 
-            // Check if reached target area
+            // Check if reached CORRECT target area
             if (targetReachedTime == null && targetBounds != null) {
                 if (targetBounds!!.contains(x.toInt(), y.toInt())) {
                     targetReachedTime = currentTime
-                    Log.d(TAG, "✓ Target area reached: ${currentTime - goBeepTime}ms after go beep")
+                    Log.d(TAG, "✓ CORRECT target reached: $correctTargetIndex at ${currentTime - goBeepTime}ms")
                 }
             }
 
@@ -118,7 +129,6 @@ class MovementTracker {
             lastY = y
             return true
         } else if (distanceFromOrigin > 5) {
-            // Log if there's movement but below threshold
             Log.v(TAG, "Movement detected but below threshold: ${distanceFromOrigin}px (need ${MOVEMENT_THRESHOLD_PX}px)")
         }
 
@@ -165,15 +175,23 @@ class MovementTracker {
     }
 
     /**
-     * Get which target was reached (based on target bounds)
-     * Returns the target index if a target was reached, -1 otherwise
+     * Check if the correct target has been reached
      */
-    fun getReachedTargetIndex(): Int {
-        return if (targetReachedTime != null) {
-            targetIndex // Return the index of the target that was reached
-        } else {
-            -1 // No target was reached
+    fun hasReachedCorrectTarget(): Boolean {
+        return targetReachedTime != null
+    }
+
+    /**
+     * Check which circle (if any) is currently being hovered
+     * Returns the circle index, or -1 if no circle is hovered
+     */
+    fun getHoveredCircle(x: Float, y: Float): Int {
+        allCircleBounds.forEach { (index, bounds) ->
+            if (bounds.contains(x.toInt(), y.toInt())) {
+                return index
+            }
         }
+        return -1
     }
 
     private fun calculatePathLength(): Float {

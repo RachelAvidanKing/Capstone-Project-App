@@ -6,13 +6,22 @@ import android.util.Log
 import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.entity.MovementDataPoint
 import com.example.capstone_project_application.entity.Participant
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * Repository class to handle data operations and business logic
+ * Repository class to handle **data operations and business logic** for the application.
+ *
+ * It acts as a single source of truth, abstracting the data sources
+ * (local Room database and remote Firebase Firestore). It manages participant
+ * registration, login, data fetching, experiment completion checks, and
+ * the insertion and syncing of movement data.
+ *
+ * @property database The local Room database instance for local data persistence.
+ * @property context The Android context, primarily used to access [SharedPreferences].
  */
 class DataRepository(private val database: AppDatabase, private val context: Context) {
 
@@ -46,17 +55,14 @@ class DataRepository(private val database: AppDatabase, private val context: Con
 
     /**
      * Fetch participant data from Firebase and check completion status
-     * Returns null if participant doesn't exist
+     * Returns null if participant doesn't exist or on error
      */
     suspend fun fetchParticipantFromFirebase(participantId: String): Participant? {
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Fetching participant $participantId from Firebase...")
 
-                val document = firestore.collection("participants")
-                    .document(participantId)
-                    .get()
-                    .await()
+                val document = fetchParticipantDocument(participantId)
 
                 if (!document.exists()) {
                     Log.d(TAG, "Participant $participantId not found in Firebase")
@@ -64,18 +70,7 @@ class DataRepository(private val database: AppDatabase, private val context: Con
                 }
 
                 val data = document.data ?: return@withContext null
-
-                val participant = Participant(
-                    participantId = participantId,
-                    age = (data["age"] as? Long)?.toInt() ?: 0,
-                    gender = data["gender"] as? String ?: "",
-                    hasGlasses = data["hasGlasses"] as? Boolean ?: false,
-                    hasAttentionDeficit = data["hasAttentionDeficit"] as? Boolean ?: false,
-                    consentGiven = data["consentGiven"] as? Boolean ?: false,
-                    registrationTimestamp = data["registrationTimestamp"] as? Long ?: 0L,
-                    jndThreshold = (data["jndThreshold"] as? Long)?.toInt(),
-                    isUploaded = true
-                )
+                val participant = parseParticipantData(participantId, data)
 
                 Log.d(TAG, "Successfully fetched participant: $participantId, JND: ${participant.jndThreshold}")
                 participant
@@ -84,6 +79,33 @@ class DataRepository(private val database: AppDatabase, private val context: Con
                 null
             }
         }
+    }
+
+    /**
+     * Helper to fetch the raw participant document from Firestore.
+     */
+    private suspend fun fetchParticipantDocument(participantId: String): DocumentSnapshot {
+        return firestore.collection("participants")
+            .document(participantId)
+            .get()
+            .await()
+    }
+
+    /**
+     * Helper to safely parse a Map of data into a Participant object.
+     */
+    private fun parseParticipantData(participantId: String, data: Map<String, Any>): Participant {
+        return Participant(
+            participantId = participantId,
+            age = (data["age"] as? Long)?.toInt() ?: 0,
+            gender = data["gender"] as? String ?: "",
+            hasGlasses = data["hasGlasses"] as? Boolean ?: false,
+            hasAttentionDeficit = data["hasAttentionDeficit"] as? Boolean ?: false,
+            consentGiven = data["consentGiven"] as? Boolean ?: false,
+            registrationTimestamp = data["registrationTimestamp"] as? Long ?: 0L,
+            jndThreshold = (data["jndThreshold"] as? Long)?.toInt(),
+            isUploaded = true
+        )
     }
 
     /**
@@ -304,7 +326,16 @@ class DataRepository(private val database: AppDatabase, private val context: Con
         }
     }
 
+    /**
+     * Update an existing participant's information in the local database.
+     */
     suspend fun updateParticipant(participant: Participant) {
-        database.participantDao().update(participant)
+        return withContext(Dispatchers.IO) {
+            try {
+                database.participantDao().update(participant)
+            } catch (e: IllegalStateException) {
+                null
+            }
+        }
     }
 }

@@ -29,20 +29,24 @@
         android:id="@+id/tvTrialCounter"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Trial 1 of 15"
-        android:textSize="18sp"
+        android:text="TRIAL 1 OF 15"
+        android:textSize="24sp"
+        android:textStyle="bold"
         android:textColor="@android:color/black"
+        android:background="#E0E0E0"
+        android:padding="12dp"
+        android:elevation="4dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="24dp" />
+        android:layout_marginTop="20dp" />
 
-    <!-- עיגולים -->
-    <!-- שמאל למעלה -->
+    <!-- Circles (Targets) - Made smaller (80dp instead of 100dp) -->
+    <!-- Top Left -->
     <View
         android:id="@+id/circleTopLeft"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
         android:background="@drawable/circle_shape"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -51,12 +55,11 @@
         app:layout_constraintHorizontal_bias="0.2"
         app:layout_constraintVertical_bias="0.25" />
 
-
-    <!-- ימין למעלה -->
+    <!-- Top Right -->
     <View
         android:id="@+id/circleTopRight"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
         android:background="@drawable/circle_shape"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -65,11 +68,11 @@
         app:layout_constraintHorizontal_bias="0.85"
         app:layout_constraintVertical_bias="0.25"/>
 
-    <!-- שמאל למטה -->
+    <!-- Bottom Left -->
     <View
         android:id="@+id/circleBottomLeft"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
         android:background="@drawable/circle_shape"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -78,11 +81,11 @@
         app:layout_constraintHorizontal_bias="0.2"
         app:layout_constraintVertical_bias="0.8"/>
 
-    <!-- ימין למטה -->
+    <!-- Bottom Right -->
     <View
         android:id="@+id/circleBottomRight"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
         android:background="@drawable/circle_shape"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -91,7 +94,7 @@
         app:layout_constraintHorizontal_bias="0.85"
         app:layout_constraintVertical_bias="0.8"/>
 
-    <!-- ריבועים שחורים -->
+    <!-- Black Squares (Visual References) -->
     <View
         android:id="@+id/square1"
         android:layout_width="30dp"
@@ -140,13 +143,16 @@
         app:layout_constraintHorizontal_bias="0.30"
         app:layout_constraintVertical_bias="0.7"/>
 
-    <!-- X במרכז -->
+    <!-- Movable X in Center (Cursor) -->
     <TextView
         android:id="@+id/centerX"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="✕"
         android:textSize="35sp"
+        android:textColor="@android:color/black"
+        android:textStyle="bold"
+        android:elevation="10dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
