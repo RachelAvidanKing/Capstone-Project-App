@@ -11,39 +11,62 @@ import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.entity.AppDatabase
 import kotlinx.coroutines.launch
 
+/**
+ * Entry point activity for participant authentication.
+ *
+ * This activity handles participant login by validating their ID number
+ * and determining their experiment progress state:
+ * - New participants → Registration
+ * - Returning participants → Resume at appropriate stage
+ * - Completed participants → Show completion screen
+ *
+ * ## ID Validation:
+ * - Must be exactly 9 digits
+ * - Must contain only numeric characters
+ *
+ * ## Navigation Logic:
+ * - No record found → [RegistrationActivity]
+ * - Has demographics, no JND → [ThresholdActivity]
+ * - Has JND, no target trials → [TargetActivity]
+ * - All trials complete → [CompletionActivity]
+ */
 class LoginActivity : AppCompatActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
 
+    private lateinit var etIdNumber: EditText
+    private lateinit var btnContinue: Button
+    private lateinit var btnExitApp: Button
+
+    companion object {
+        private const val ID_LENGTH = 9
+        private const val TAG = "LoginActivity"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        val etIdNumber = findViewById<EditText>(R.id.etIdNumber)
-        // REMOVED: RadioGroup rgRegistered = findViewById<RadioGroup>(R.id.rgRegistered)
-        val btnContinue = findViewById<Button>(R.id.btnContinue)
-        val btnExitApp = findViewById<Button>(R.id.btnExitApp)
+        initializeViews()
+        setupClickListeners()
+    }
 
+    /**
+     * Initializes view references.
+     */
+    private fun initializeViews() {
+        etIdNumber = findViewById(R.id.etIdNumber)
+        btnContinue = findViewById(R.id.btnContinue)
+        btnExitApp = findViewById(R.id.btnExitApp)
+    }
+
+    /**
+     * Sets up click listeners for buttons.
+     */
+    private fun setupClickListeners() {
         btnContinue.setOnClickListener {
-            val idNumber = etIdNumber.text.toString().trim()
-
-            // Validate ID is exactly 9 digits
-            if (idNumber.isEmpty()) {
-                Toast.makeText(this, "Please enter your ID number", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            if (idNumber.length != 9 || !idNumber.all { it.isDigit() }) {
-                Toast.makeText(this, "ID must be exactly 9 digits", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            btnContinue.isEnabled = false
-
-            lifecycleScope.launch {
-                handleLogin(idNumber)
-            }
+            handleContinueClick()
         }
 
         btnExitApp.setOnClickListener {
@@ -51,106 +74,206 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        showExitAppDialog()
-        // Don't call super.onBackPressed() because we're handling it with the dialog
+    /**
+     * Handles the continue button click event.
+     * Validates input and initiates login process.
+     */
+    private fun handleContinueClick() {
+        val idNumber = etIdNumber.text.toString().trim()
+
+        if (!validateIdInput(idNumber)) {
+            return
+        }
+
+        btnContinue.isEnabled = false
+
+        lifecycleScope.launch {
+            handleLogin(idNumber)
+        }
     }
 
+    /**
+     * Validates the participant ID input.
+     *
+     * @param idNumber The ID number to validate
+     * @return true if valid, false otherwise (with toast message)
+     */
+    private fun validateIdInput(idNumber: String): Boolean {
+        return when {
+            idNumber.isEmpty() -> {
+                showToast("Please enter your ID number")
+                false
+            }
+            idNumber.length != ID_LENGTH || !idNumber.all { it.isDigit() } -> {
+                showToast("ID must be exactly $ID_LENGTH digits")
+                false
+            }
+            else -> true
+        }
+    }
+
+    /**
+     * Handles back press by showing exit confirmation dialog.
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        showExitAppDialog()
+    }
+
+    /**
+     * Shows a confirmation dialog for exiting the application.
+     */
     private fun showExitAppDialog() {
         AlertDialog.Builder(this)
             .setTitle("Exit Application?")
             .setMessage("Are you sure you want to exit the app?")
             .setPositiveButton("Exit") { _, _ ->
-                finishAffinity() // Closes the app completely
+                finishAffinity()
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-
+    /**
+     * Handles the login process by checking participant status in Firebase.
+     *
+     * @param participantId The validated participant ID
+     */
     private suspend fun handleLogin(participantId: String) {
-        // Show loading with progress dialog
-        var progressDialog: AlertDialog? = null
-        runOnUiThread {
-            progressDialog = AlertDialog.Builder(this)
-                .setTitle("Please Wait")
-                .setMessage("Checking registration...")
-                .setCancelable(false)
-                .create()
-            progressDialog?.show()
-        }
+        val progressDialog = showProgressDialog()
 
         try {
-            val hasCompleted = repository.hasCompletedExperiment(participantId)
-
-            if (hasCompleted) {
-                runOnUiThread {
-                    progressDialog?.dismiss()
-                    navigateToCompletionActivity()
-                }
+            // Check if participant has already completed the experiment
+            if (repository.hasCompletedExperiment(participantId)) {
+                dismissDialog(progressDialog)
+                navigateToCompletionActivity()
                 return
             }
 
+            // Try to fetch existing participant from Firebase
             val participant = repository.fetchParticipantFromFirebase(participantId)
 
-            runOnUiThread {
-                progressDialog?.dismiss()
-            }
+            dismissDialog(progressDialog)
 
             if (participant == null) {
+                // New participant - start registration
                 repository.setParticipantId(participantId)
-                runOnUiThread {
-                    navigateToRegistration()
-                }
-                return
-            }
-
-            repository.setExistingParticipant(participant)
-
-            // Check what stage they're at
-            if (participant.jndThreshold != null) {
-                // Has JND but hasn't completed target trials - go to target
-                runOnUiThread { navigateToTargetActivity() }
+                navigateToRegistration()
             } else {
-                // Has demographics but no JND - go to threshold (redo threshold test)
-                runOnUiThread { navigateToThresholdActivity() }
+                // Existing participant - resume from where they left off
+                repository.setExistingParticipant(participant)
+                navigateBasedOnProgress(participant.jndThreshold)
             }
 
         } catch (e: Exception) {
-            runOnUiThread {
-                progressDialog?.dismiss()
-                Toast.makeText(
-                    this,
-                    "A connection error occurred. Please try again.",
-                    Toast.LENGTH_LONG
-                ).show()
-                findViewById<Button>(R.id.btnContinue).isEnabled = true
-            }
+            dismissDialog(progressDialog)
+            handleLoginError()
         }
     }
 
+    /**
+     * Navigates to the appropriate screen based on experiment progress.
+     *
+     * @param jndThreshold The participant's JND threshold (null if not completed)
+     */
+    private fun navigateBasedOnProgress(jndThreshold: Int?) {
+        if (jndThreshold != null) {
+            // Has JND threshold - continue to target trials
+            navigateToTargetActivity()
+        } else {
+            // Has demographics but no JND - redo threshold test
+            navigateToThresholdActivity()
+        }
+    }
+
+    /**
+     * Shows a progress dialog during login.
+     *
+     * @return The AlertDialog instance
+     */
+    private fun showProgressDialog(): AlertDialog {
+        return AlertDialog.Builder(this)
+            .setTitle("Please Wait")
+            .setMessage("Checking registration...")
+            .setCancelable(false)
+            .create()
+            .apply { show() }
+    }
+
+    /**
+     * Dismisses a dialog on the UI thread.
+     *
+     * @param dialog The dialog to dismiss
+     */
+    private fun dismissDialog(dialog: AlertDialog?) {
+        runOnUiThread {
+            dialog?.dismiss()
+        }
+    }
+
+    /**
+     * Handles login errors by showing a message and re-enabling the continue button.
+     */
+    private fun handleLoginError() {
+        runOnUiThread {
+            showToast("A connection error occurred. Please try again.", Toast.LENGTH_LONG)
+            btnContinue.isEnabled = true
+        }
+    }
+
+    // ===========================
+    // Navigation Methods
+    // ===========================
+
+    /**
+     * Navigates to the registration activity for new participants.
+     */
     private fun navigateToRegistration() {
-        val intent = Intent(this, RegistrationActivity::class.java)
-        startActivity(intent)
-        finish()
+        startActivityAndFinish(RegistrationActivity::class.java)
     }
 
+    /**
+     * Navigates to the JND threshold explanation screen.
+     */
     private fun navigateToThresholdActivity() {
-        val intent = Intent(this, ThresholdActivity::class.java)
-        startActivity(intent)
-        finish()
+        startActivityAndFinish(ExplainJNDActivity::class.java)
     }
 
+    /**
+     * Navigates to the target trial explanation screen.
+     */
     private fun navigateToTargetActivity() {
-        val intent = Intent(this, TargetActivity::class.java)
+        startActivityAndFinish(ExplainTargetActivity::class.java)
+    }
+
+    /**
+     * Navigates to the completion screen with cleared back stack.
+     */
+    private fun navigateToCompletionActivity() {
+        val intent = Intent(this, CompletionActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
         startActivity(intent)
         finish()
     }
 
-    private fun navigateToCompletionActivity() {
-        val intent = Intent(this, CompletionActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(intent)
+    /**
+     * Helper method to start an activity and finish current one.
+     *
+     * @param activityClass The activity class to start
+     */
+    private fun startActivityAndFinish(activityClass: Class<*>) {
+        startActivity(Intent(this, activityClass))
         finish()
+    }
+
+    /**
+     * Helper method to show toast messages.
+     *
+     * @param message The message to display
+     * @param duration Toast duration (default: SHORT)
+     */
+    private fun showToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+        Toast.makeText(this, message, duration).show()
     }
 }

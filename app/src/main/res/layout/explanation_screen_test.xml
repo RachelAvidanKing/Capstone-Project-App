@@ -7,28 +7,13 @@
     android:padding="24dp"
     android:background="@drawable/success_background">
 
-    <!-- Exit Button - Top Left -->
-    <Button
-        android:id="@+id/btnExit"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Exit"
-        android:textSize="22sp"
-        android:backgroundTint="@android:color/holo_red_light"
-        android:textColor="@android:color/white"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"/>
 
     <!-- Title -->
     <TextView
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Explanation for the Next Page"
+        android:text="Explanation for the next part of the experiment:"
         android:textSize="30sp"
         android:textStyle="bold"
         android:textColor="@android:color/holo_blue_light"
@@ -43,7 +28,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="On the next page, you will hear three beeps in the same tone. \nOn the fourth beep, which will be in a different tone, you will need to move your finger from the center of the board (where the “X” is marked) toward the target.
-    \nThere are four targets, and you must select the one with the lightest color.
+    \nThere are four targets, and you must select the one with the obvious color difference.
 \nYou will need to complete this test 15 times.\n\nGood luck! :)"
         android:textSize="26sp"
         android:textColor="@android:color/black"
@@ -53,32 +38,30 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- Next Button - Before the test -->
-    <Button
-        android:id="@+id/btnNext"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Next"
-        android:textSize="22sp"
-        android:backgroundTint="@android:color/holo_blue_light"
-        android:textColor="@android:color/white"
-        android:paddingHorizontal="40dp"
-        android:layout_marginTop="60dp"
-        android:layout_marginBottom="40dp"
-        app:layout_constraintTop_toBottomOf="@id/tvExplanation"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- Remark -->
+    <!-- Remark1 -->
     <TextView
-        android:id="@+id/btnRemark"
+        android:id="@+id/btnRemark1"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="*You may exit the test at any time. However, your progress will not be saved unless you start and complete the test in the same session."
+        android:text="*Please press anywhere on the screen to continue."
         android:textSize="20sp"
         android:textColor="@android:color/black"
         android:layout_marginTop="60dp"
-        app:layout_constraintTop_toBottomOf="@+id/btnNext"
+        app:layout_constraintTop_toBottomOf="@+id/tvExplanation"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <!-- Remark2 -->
+    <TextView
+        android:id="@+id/btnRemark2"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="**You may exit the test at any time. However, your progress will not be saved unless you start and complete all trials in experiment in the same session."
+        android:textSize="20sp"
+        android:textColor="@android:color/black"
+        android:layout_marginTop="60dp"
+        app:layout_constraintTop_toBottomOf="@+id/btnRemark1"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 

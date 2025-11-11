@@ -37,9 +37,21 @@
         </activity>
 
         <activity
+            android:name=".boundary.ExplainJNDActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CapstoneProjectApplication">
+        </activity>
+
+        <activity
             android:name=".boundary.ThresholdActivity"
             android:exported="false"
             android:theme="@style/Theme.CapstoneProjectApplication" />
+
+        <activity
+            android:name=".boundary.ExplainTargetActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CapstoneProjectApplication">
+        </activity>
 
         <activity
             android:name=".boundary.TargetActivity"

@@ -1,5 +1,3 @@
-// File: CompletionActivity.kt
-
 package com.example.capstone_project_application.boundary
 
 import android.content.Intent
@@ -11,6 +9,21 @@ import com.example.capstone_project_application.R
 import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.entity.AppDatabase
 
+/**
+ * Final screen displayed when the participant completes the entire experiment.
+ *
+ * This activity shows a completion message and allows the user to tap anywhere
+ * to return to the login screen. The back button is disabled to prevent
+ * accidental navigation away from this final state.
+ *
+ * ## Behavior:
+ * - Clears the current participant session
+ * - Navigates back to [LoginActivity] with a cleared back stack
+ * - Prevents back navigation to maintain experiment flow integrity
+ *
+ * ## User Interaction:
+ * - Tap anywhere on the screen to return to login
+ */
 class CompletionActivity : AppCompatActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
@@ -18,17 +31,24 @@ class CompletionActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Ensure you have a simple layout with your message, e.g., activity_completion.xml
         setContentView(R.layout.activity_completion)
 
-        // Make the entire content view listen for any touch
-        val rootView = findViewById<View>(android.R.id.content)
-        rootView.setOnClickListener {
+        setupTouchListeners()
+    }
+
+    /**
+     * Configures touch listeners on the root view to enable "tap anywhere to continue" functionality.
+     */
+    private fun setupTouchListeners() {
+        findViewById<View>(android.R.id.content).setOnClickListener {
             handleCompletionDismiss()
         }
     }
 
-    // This handles any touch event on the screen, fulfilling the "tap anywhere" requirement
+    /**
+     * Handles any touch event on the screen, fulfilling the "tap anywhere" requirement.
+     * Only triggers navigation on the ACTION_UP event to ensure intentional taps.
+     */
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         if (event?.action == MotionEvent.ACTION_UP) {
             handleCompletionDismiss()
@@ -37,17 +57,27 @@ class CompletionActivity : AppCompatActivity() {
         return super.onTouchEvent(event)
     }
 
-
-    // Disable the back button while on this final screen
+    /**
+     * Disables the back button to prevent accidental navigation away from the completion screen.
+     */
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        // Do nothing to prevent accidentally going back
+        // Intentionally empty - prevents back navigation from completion screen
     }
 
+    /**
+     * Handles the completion dismissal flow:
+     * 1. Clears the current participant session
+     * 2. Navigates to [LoginActivity] with a cleared back stack
+     * 3. Finishes this activity
+     */
     private fun handleCompletionDismiss() {
         repository.clearCurrentParticipant()
-        val intent = Intent(this, LoginActivity::class.java)
-        // Clear all back stack and start fresh at LoginActivity
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+        val intent = Intent(this, LoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+
         startActivity(intent)
         finish()
     }
