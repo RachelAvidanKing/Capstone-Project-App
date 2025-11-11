@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white"
+    android:background="@drawable/success_background"
     android:padding="24dp">
 
     <TextView
@@ -55,7 +55,8 @@
         android:textSize="18sp"
         android:backgroundTint="@android:color/holo_blue_light"
         android:textColor="@android:color/white"
-        app:layout_constraintTop_toBottomOf="@id/etIdNumber" app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/etIdNumber"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="40dp"/>
 
