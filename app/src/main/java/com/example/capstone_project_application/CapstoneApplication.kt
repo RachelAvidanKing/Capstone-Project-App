@@ -2,11 +2,19 @@ package com.example.capstone_project_application
 
 import android.app.Application
 import android.util.Log
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.example.capstone_project_application.control.DataUploadWorker
 import com.example.capstone_project_application.entity.AppDatabase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import java.util.concurrent.TimeUnit
+
 
 /**
  * Custom Application class for initializing app-wide components
@@ -19,7 +27,7 @@ class CapstoneApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         initializeAppCheck()
-
+        setupPeriodicUploadWorker()
     }
 
     private fun initializeAppCheck() {
@@ -40,7 +48,7 @@ class CapstoneApplication : Application() {
             // Force token fetch to generate the logcat token for registration
             firebaseAppCheck.getToken(true)
                 .addOnSuccessListener {
-                    // This is where you'll see the token in logcat
+                    // This is where we'll see the token in logcat
                     Log.d("AppCheck", "Debug token generated in logcat.")
                 }
                 .addOnFailureListener { e ->
@@ -48,11 +56,38 @@ class CapstoneApplication : Application() {
                 }
 
         } else {
-            // Use Play Integrity for release/production builds (your research tablet)
+            // Use Play Integrity for release/production builds
             firebaseAppCheck.installAppCheckProviderFactory(
                 PlayIntegrityAppCheckProviderFactory.getInstance()
             )
             Log.d("AppCheck", "Using PlayIntegrityAppCheckProviderFactory for release.")
         }
+    }
+
+    /**
+     * his function schedules DataUploadWorker to run periodically
+     * in the background, even if the app is closed.
+     */
+    private fun setupPeriodicUploadWorker() {
+        // Define constraints: Only run when connected to the internet
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        // Create a periodic request to run our worker every 6 hours
+        // WorkManager is smart and will run this at an optimal time
+        val repeatingRequest = PeriodicWorkRequestBuilder<DataUploadWorker>(6, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .build()
+
+        // Schedule the work, ensuring only one instance of this "periodic-sync"
+        // is active at any time.
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "periodic-sync",
+            ExistingPeriodicWorkPolicy.KEEP, // Keep the existing work if one is already scheduled
+            repeatingRequest
+        )
+
+        Log.d("AppCheck", "Periodic background data sync scheduled.")
     }
 }

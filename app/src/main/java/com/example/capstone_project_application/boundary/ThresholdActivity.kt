@@ -18,6 +18,9 @@ import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.control.InactivityHelper
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import android.media.AudioManager
+import android.media.ToneGenerator
+
 
 /**
  * Activity for conducting Just Noticeable Difference (JND) threshold determination.
@@ -54,6 +57,10 @@ class ThresholdActivity : AppCompatActivity() {
     private val repository by lazy { DataRepository(database, this) }
     private lateinit var inactivityHelper: InactivityHelper
 
+    private val toneGenerator by lazy {
+        ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+    }
+
     companion object {
         private const val TAG = "ThresholdActivity"
     }
@@ -74,6 +81,7 @@ class ThresholdActivity : AppCompatActivity() {
         initializeController()
         initializeInactivityHelper()
         setupClickListeners()
+        hideNextButton()
         startNextTrial()
     }
 
@@ -93,15 +101,24 @@ class ThresholdActivity : AppCompatActivity() {
     }
 
     /**
+     * Hides the Next button initially.
+     */
+    private fun hideNextButton() {
+        binding.btnN.visibility = android.view.View.GONE
+    }
+
+    /**
      * Sets up click listeners for all interactive elements.
      */
     private fun setupClickListeners() {
         binding.viewA.setOnClickListener {
+            playConfirmationTone()
             inactivityHelper.resetTimer()
             handleUserResponse("A")
         }
 
         binding.viewB.setOnClickListener {
+            playConfirmationTone()
             inactivityHelper.resetTimer()
             handleUserResponse("B")
         }
@@ -230,7 +247,7 @@ class ThresholdActivity : AppCompatActivity() {
     }
 
     /**
-     * Saves the calculated threshold to database and attempts upload.
+     * Saves the calculated threshold to local database and flags the data for DataUploadWorker.
      *
      * @param jndThreshold The calculated JND threshold value
      */
@@ -243,17 +260,15 @@ class ThresholdActivity : AppCompatActivity() {
                 return
             }
 
-            // Update participant with JND threshold
-            val updatedParticipant = participant.copy(jndThreshold = jndThreshold)
+             val updatedParticipant = participant.copy(
+                jndThreshold = jndThreshold,
+                isUploaded = false
+            )
+
             repository.updateParticipant(updatedParticipant)
 
             Log.d(TAG, "JND Threshold saved locally: ${participant.participantId}")
 
-            // Attempt to upload (with offline fallback)
-            val uploadSuccess = repository.uploadParticipantDemographics()
-            handleUploadResult(uploadSuccess)
-
-            // Update UI
             showCompletionUI()
 
         } catch (e: Exception) {
@@ -370,7 +385,6 @@ class ThresholdActivity : AppCompatActivity() {
             try {
                 val participant = repository.getCurrentParticipant()
 
-                // Ensure JND is saved if not already
                 if (participant?.jndThreshold == null) {
                     saveThresholdBeforeExit()
                 }
@@ -395,7 +409,12 @@ class ThresholdActivity : AppCompatActivity() {
         val updatedParticipant = participant.copy(jndThreshold = jndThreshold)
 
         repository.updateParticipant(updatedParticipant)
-        repository.uploadParticipantDemographics()
+
+        try {
+            repository.uploadParticipantDemographics()
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not upload during exit (offline?): ${e.message}")
+        }
 
         Log.d(TAG, "JND saved during exit: $jndThreshold")
     }
@@ -414,6 +433,13 @@ class ThresholdActivity : AppCompatActivity() {
     // ===========================
     // Utility Methods
     // ===========================
+
+    /**
+     * Plays a brief system tone to confirm button press.
+     */
+    private fun playConfirmationTone() {
+        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 300)
+    }
 
     /**
      * Shows a toast message.

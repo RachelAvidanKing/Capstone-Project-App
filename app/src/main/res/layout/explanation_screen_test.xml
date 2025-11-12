@@ -28,7 +28,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="On the next page, you will hear three beeps in the same tone. \nOn the fourth beep, which will be in a different tone, you will need to move your finger from the center of the board (where the “X” is marked) toward the target.
-    \nThere are four targets, and you must select the one with the obvious color difference.
+    \nThere are four targets, and you must select the one with the obvious color difference. \nIMPORTANT: Avoid the black square obstacles on the way to your target!
 \nYou will need to complete this test 15 times.\n\nGood luck! :)"
         android:textSize="26sp"
         android:textColor="@android:color/black"
