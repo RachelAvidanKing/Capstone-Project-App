@@ -2,6 +2,7 @@ package com.example.capstone_project_application.boundary
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -135,7 +136,8 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /**
-     * Handles the login process by checking participant status in Firebase.
+     * Handles the login process by checking participant status.
+     * Checks local database first, then Firebase if online.
      *
      * @param participantId The validated participant ID
      */
@@ -143,29 +145,60 @@ class LoginActivity : AppCompatActivity() {
         val progressDialog = showProgressDialog()
 
         try {
-            // Check if participant has already completed the experiment
-            if (repository.hasCompletedExperiment(participantId)) {
+            repository.setParticipantId(participantId)
+
+            // STEP 1: Check local database first (offline-first approach)
+            val localParticipant = repository.getCurrentParticipant()
+
+            if (localParticipant != null) {
+                Log.d(TAG, "Participant found in local database")
+
+                val localTrialCount = database.targetTrialDao()
+                    .getTrialCountForParticipant(participantId)
+
                 dismissDialog(progressDialog)
-                navigateToCompletionActivity()
-                return
+
+                if (localTrialCount >= 15) {
+                    navigateToCompletionActivity()
+                    return
+                } else {
+                    navigateBasedOnProgress(localParticipant.jndThreshold)
+                    return
+                }
             }
 
-            // Try to fetch existing participant from Firebase
-            val participant = repository.fetchParticipantFromFirebase(participantId)
+            // STEP 2: Not found locally - try Firebase (requires network)
+            Log.d(TAG, "Participant not found locally, checking Firebase...")
 
-            dismissDialog(progressDialog)
+            try {
+                val hasCompleted = repository.hasCompletedExperiment(participantId)
+                if (hasCompleted) {
+                    dismissDialog(progressDialog)
+                    navigateToCompletionActivity()
+                    return
+                }
 
-            if (participant == null) {
-                // New participant - start registration
-                repository.setParticipantId(participantId)
+                val firebaseParticipant = repository.fetchParticipantFromFirebase(participantId)
+
+                dismissDialog(progressDialog)
+
+                if (firebaseParticipant == null) {
+                    navigateToRegistration()
+                } else {
+                    repository.setExistingParticipant(firebaseParticipant)
+                    navigateBasedOnProgress(firebaseParticipant.jndThreshold)
+                }
+
+            } catch (networkException: Exception) {
+                Log.w(TAG, "Could not reach Firebase (offline?): ${networkException.message}")
+                dismissDialog(progressDialog)
+
+                showToast("Working offline. Starting new registration.", Toast.LENGTH_LONG)
                 navigateToRegistration()
-            } else {
-                // Existing participant - resume from where they left off
-                repository.setExistingParticipant(participant)
-                navigateBasedOnProgress(participant.jndThreshold)
             }
 
         } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error during login", e)
             dismissDialog(progressDialog)
             handleLoginError()
         }

@@ -222,12 +222,11 @@ class RegistrationActivity : AppCompatActivity() {
     // ===========================
 
     /**
-     * Saves registration data locally and attempts to upload to Firebase.
+     * Saves registration data locally.
      */
     private fun saveRegistrationData(demographics: Demographics) {
         lifecycleScope.launch {
             try {
-                // Register participant locally
                 val participantId = repository.registerParticipant(
                     age = demographics.age!!,
                     gender = demographics.gender!!,
@@ -236,10 +235,7 @@ class RegistrationActivity : AppCompatActivity() {
                     consentGiven = true
                 )
 
-                // Attempt Firebase upload
-                val uploadSuccess = repository.uploadParticipantDemographics()
-
-                handleRegistrationSuccess(participantId, uploadSuccess)
+                handleRegistrationSuccess(participantId, false)
 
             } catch (e: Exception) {
                 handleRegistrationError(e)

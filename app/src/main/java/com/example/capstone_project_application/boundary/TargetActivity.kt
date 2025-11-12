@@ -773,12 +773,11 @@ class TargetActivity : AppCompatActivity() {
 
     /**
      * Completes the experiment and triggers data upload.
-     * OPTIMIZATION: Upload happens in background, doesn't block user flow.
      */
     private fun completeExperiment() {
-        Log.d(TAG, "═══════════════════════════════════════════")
+        Log.d(TAG, "╔════════════════════════════════════════╗")
         Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
-        Log.d(TAG, "═══════════════════════════════════════════")
+        Log.d(TAG, "╚════════════════════════════════════════╝")
 
         lifecycleScope.launch {
             try {
@@ -787,13 +786,16 @@ class TargetActivity : AppCompatActivity() {
                     .getTrialCountForParticipant(participantId)
                 Log.d(TAG, "✓ Total trials saved locally: $trialCount")
 
-                // Trigger upload in background (non-blocking)
                 Log.d(TAG, "→ Triggering Firebase upload...")
-                WorkScheduler.triggerImmediateUpload(this@TargetActivity)
+                try {
+                    WorkScheduler.triggerImmediateUpload(this@TargetActivity)
+                    Log.d(TAG, "✓ Upload job scheduled successfully")
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠ Could not schedule upload (will retry later): ${e.message}")
+                }
 
             } catch (e: Exception) {
-                Log.e(TAG, "✗ Background error during final data processing", e)
-                // Don't block user flow - continue to completion screen
+                Log.e(TAG, "✗ Error during completion processing", e)
             }
         }
 
