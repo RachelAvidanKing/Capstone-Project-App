@@ -438,7 +438,7 @@ class ThresholdActivity : AppCompatActivity() {
      * Plays a brief system tone to confirm button press.
      */
     private fun playConfirmationTone() {
-        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 300)
+        toneGenerator.startTone(ToneGenerator.TONE_SUP_CONFIRM, 100)
     }
 
     /**
