@@ -12,12 +12,12 @@
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
-        <!-- Exit Button - Top Left -->
+        <!-- Exit Button - Top Right -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="start">
+            android:gravity="end">
 
             <Button
                 android:id="@+id/btnExit"
