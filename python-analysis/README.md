@@ -1,0 +1,1 @@
+This is the Capstone Project for Rachel Avidan-King and Daniel Shahar's Software Engineering degree. No commercial use is intended, this is a public repository purley for ease of our professors' grading.
