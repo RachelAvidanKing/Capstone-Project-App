@@ -80,59 +80,61 @@ class TargetController(private val jndThreshold: Int) {
         Log.d(TAG, "Trial sequence generated: ${trialSequence.size} trials")
     }
 
+
     /**
      * Generates a balanced, randomized sequence of trials.
      *
      * Ensures:
-     * 1. Equal distribution of trial types (5 each)
-     * 2. No consecutive identical trials
-     * 3. Random target locations
+     * 1. Equal distribution of trial types (5 each).
+     * 2. Balanced target locations for each type ({2, 1, 1, 1} distribution).
+     * 3. No consecutive identical trials (same type AND location).
      *
      * @return List of (TrialType, TargetIndex) pairs
      */
     private fun generateTrialSequence(): List<Pair<TrialType, Int>> {
-        val trialTypes = createBalancedTrialTypeList()
-        val shuffledTypes = trialTypes.shuffled()
+        val allTrials = mutableListOf<Pair<TrialType, Int>>()
 
-        return assignTargetIndicesWithoutConsecutiveDuplicates(shuffledTypes)
-    }
+        //Create a balanced master list
+        TrialType.values().forEach { trialType ->
+            val locations = (0 until NUM_TARGET_CIRCLES).toMutableList()
+            locations.add(Random.nextInt(NUM_TARGET_CIRCLES))
 
-    /**
-     * Creates a list with balanced trial types.
-     *
-     * @return List containing 5 of each trial type
-     */
-    private fun createBalancedTrialTypeList(): List<TrialType> {
-        return buildList {
-            repeat(TRIALS_PER_TYPE) { add(TrialType.PRE_JND) }
-            repeat(TRIALS_PER_TYPE) { add(TrialType.PRE_SUPRA) }
-            repeat(TRIALS_PER_TYPE) { add(TrialType.CONCURRENT_SUPRA) }
+            locations.forEach { location ->
+                allTrials.add(Pair(trialType, location))
+            }
         }
-    }
 
-    /**
-     * Assigns random target indices while avoiding consecutive identical trials.
-     *
-     * A trial is considered identical if it has the same type AND target index.
-     *
-     * @param trialTypes Shuffled list of trial types
-     * @return List of (TrialType, TargetIndex) pairs
-     */
-    private fun assignTargetIndicesWithoutConsecutiveDuplicates(
-        trialTypes: List<TrialType>
-    ): List<Pair<TrialType, Int>> {
-        val trials = mutableListOf<Pair<TrialType, Int>>()
+        // Shuffle the master list, avoiding consecutive identicals
+        val shuffledSequence = mutableListOf<Pair<TrialType, Int>>()
         var previousTrial: Pair<TrialType, Int>? = null
 
-        for (trialType in trialTypes) {
-            val targetIndex = selectTargetIndexAvoidingDuplicate(trialType, previousTrial)
-            val currentTrial = Pair(trialType, targetIndex)
+        while (allTrials.isNotEmpty()) {
+            var selectedIndex = Random.nextInt(allTrials.size)
+            var selectedTrial = allTrials[selectedIndex]
 
-            trials.add(currentTrial)
-            previousTrial = currentTrial
+            if (selectedTrial == previousTrial && allTrials.size > 1) {
+                var attempts = 0
+                val originalIndex = selectedIndex
+
+                while (selectedTrial == previousTrial && attempts < 10) {
+                    selectedIndex = (selectedIndex + 1) % allTrials.size // Try next
+                    selectedTrial = allTrials[selectedIndex]
+                    attempts++
+                }
+            }
+
+            shuffledSequence.add(selectedTrial)
+            allTrials.removeAt(selectedIndex)
+
+            previousTrial = selectedTrial
         }
 
-        return trials
+        Log.d(TAG, "Balanced trial sequence generated: ${shuffledSequence.size} trials")
+        shuffledSequence.forEachIndexed { index, (type, target) ->
+            Log.v(TAG, "  Trial ${index + 1}: $type, Target $target")
+        }
+
+        return shuffledSequence
     }
 
     /**
@@ -226,6 +228,10 @@ class TargetController(private val jndThreshold: Int) {
             finalHue = null,
             isExperimentFinished = true
         )
+    }
+
+    fun getTotalTrials(): Int {
+        return TOTAL_TRIALS  // or whatever your constant is
     }
 
     /**

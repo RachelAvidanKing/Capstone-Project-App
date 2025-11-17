@@ -3,7 +3,6 @@ package com.example.capstone_project_application.boundary
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -20,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.view.View
 
 
 /**
@@ -73,6 +73,21 @@ class ThresholdActivity : AppCompatActivity() {
         175 to R.color.blue_175, 140 to R.color.blue_140
     )
 
+    // Add a list of the new patches
+    private val patches: List<View> by lazy {
+        listOf(
+            binding.patchTopLeft,
+            binding.patchTopRight,
+            binding.patchBottomLeft,
+            binding.patchBottomRight
+        )
+    }
+
+    // A neutral "off" color for unused patches
+    private val neutralColor by lazy {
+        ContextCompat.getColor(this, R.color.grey_neutral)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityThresholdBinding.inflate(layoutInflater)
@@ -111,16 +126,17 @@ class ThresholdActivity : AppCompatActivity() {
      * Sets up click listeners for all interactive elements.
      */
     private fun setupClickListeners() {
-        binding.viewA.setOnClickListener {
-            playConfirmationTone()
-            inactivityHelper.resetTimer()
-            handleUserResponse("A")
-        }
-
-        binding.viewB.setOnClickListener {
-            playConfirmationTone()
-            inactivityHelper.resetTimer()
-            handleUserResponse("B")
+        // Set one listener for all four patches
+        patches.forEach { patch ->
+            patch.setOnClickListener { view ->
+                // Check the tag to see if this is an active patch ("A" or "B")
+                val response = view.tag as? String
+                if (response == "A" || response == "B") {
+                    playConfirmationTone()
+                    inactivityHelper.resetTimer()
+                    handleUserResponse(response) // Pass "A" or "B" to controller
+                }
+            }
         }
 
         binding.btnExit.setOnClickListener {
@@ -187,6 +203,7 @@ class ThresholdActivity : AppCompatActivity() {
 
     /**
      * Displays the color patches for the current trial.
+     * Randomly assigns A and B to two of the four available patches.
      *
      * @param hueA Hue value for patch A
      * @param hueB Hue value for patch B
@@ -195,8 +212,30 @@ class ThresholdActivity : AppCompatActivity() {
         val colorA = getColorForHue(hueA)
         val colorB = getColorForHue(hueB)
 
-        binding.viewA.setBackgroundColor(colorA)
-        binding.viewB.setBackgroundColor(colorB)
+        // 1. Get two different random indices from our 4 patches
+        val patchIndices = (0..3).shuffled()
+        val patchAIndex = patchIndices[0]
+        val patchBIndex = patchIndices[1]
+
+        // 2. Set the colors and tags for the active patches
+        patches[patchAIndex].apply {
+            setBackgroundColor(colorA)
+            tag = "A" // Store which patch this is
+        }
+        patches[patchBIndex].apply {
+            setBackgroundColor(colorB)
+            tag = "B" // Store which patch this is
+        }
+
+        // 3. Set the *other two* patches to a neutral "off" color
+        patches[patchIndices[2]].apply {
+            setBackgroundColor(neutralColor)
+            tag = null // Not a valid target
+        }
+        patches[patchIndices[3]].apply {
+            setBackgroundColor(neutralColor)
+            tag = null // Not a valid target
+        }
     }
 
     /**
@@ -242,8 +281,10 @@ class ThresholdActivity : AppCompatActivity() {
      * Disables color patches to prevent further interaction.
      */
     private fun disablePatches() {
-        binding.viewA.isEnabled = false
-        binding.viewB.isEnabled = false
+        patches.forEach { patch ->
+            patch.isEnabled = false
+            patch.tag = null
+        }
     }
 
     /**

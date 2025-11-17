@@ -46,7 +46,7 @@
         android:layout_marginTop="30dp" />
 
 
-    <!-- Circles (Targets) - Made smaller (80dp instead of 100dp) -->
+    <!-- Circles (Targets) -->
     <!-- Top Left -->
     <View
         android:id="@+id/circleTopLeft"

@@ -80,6 +80,10 @@ class TargetActivity : AppCompatActivity() {
 
     // State Management
     private var isTrialInProgress = false
+    // Practice Mode Constants and State
+    private var isPracticeMode = true
+    private var isTransitioning = false
+    private var practiceTrialNumber = 0
     private var trialStartTime: Long = 0
 
     // Hover Detection State
@@ -95,6 +99,7 @@ class TargetActivity : AppCompatActivity() {
         private const val NUM_BEEPS = 4
         private const val PREPARATION_DELAY_MS = 1000L
         private const val INTER_TRIAL_DELAY_MS = 1500L
+        private const val TRANSITION_PAUSE_MS = 3000L
 
         // Visual Constants
         private const val ENLARGED_SCALE = 1.3f
@@ -102,6 +107,8 @@ class TargetActivity : AppCompatActivity() {
 
         // Special Hue Identifier
         private const val OBVIOUS_HUE_IDENTIFIER = 999
+
+        private const val MOCK_TRIAL_COUNT = 1
     }
 
     // Color mapping for different hues
@@ -178,7 +185,7 @@ class TargetActivity : AppCompatActivity() {
             Log.d(TAG, "JND Threshold found: ${participant.jndThreshold}")
             controller = TargetController(participant.jndThreshold!!)
             inactivityHelper.resetTimer()
-            startNewTrial()
+            startSequence()
         }
     }
 
@@ -382,8 +389,9 @@ class TargetActivity : AppCompatActivity() {
     /**
      * Starts a new trial or completes the experiment.
      */
-    private fun startNewTrial() {
-        if (isTrialInProgress) return
+    private fun startExperimentTrial() {
+        // CRITICAL: Don't start if we're still transitioning
+        if (isTrialInProgress || isTransitioning) return
 
         currentTrialState = controller.startNewTrial()
 
@@ -392,15 +400,8 @@ class TargetActivity : AppCompatActivity() {
             return
         }
 
-        initializeTrialState()
-        setupTargetBounds()
         updateTrialDisplay()
-        resetCirclesToNeutral()
-
-        // Add preparation delay before beeps
-        handler.postDelayed({
-            startBeepAndTargetSequence()
-        }, PREPARATION_DELAY_MS)
+        runTrial(currentTrialState)
     }
 
     /**
@@ -564,9 +565,15 @@ class TargetActivity : AppCompatActivity() {
         Log.d(TAG, "Trial complete - Correct target reached")
 
         isTrialInProgress = false
-        saveTrialData(responseTime)
 
-        scheduleNextTrial()
+        // Save data first, THEN schedule next trial
+        if (isPracticeMode) {
+            Log.d(TAG, "PRACTICE TRIAL complete. Data not recorded.")
+            scheduleNextTrial()
+        } else {
+            saveTrialData(responseTime)
+            scheduleNextTrial()
+        }
     }
 
     /**
@@ -600,13 +607,30 @@ class TargetActivity : AppCompatActivity() {
     }
 
     /**
-     * Schedules the next trial after a delay.
+     * Schedules the start of the next trial after a delay.
+     * This function now controls the transition from Practice to Experiment.
      */
     private fun scheduleNextTrial() {
         handler.postDelayed({
             resetCenterXPosition()
             resetAllCircleSizes()
-            startNewTrial()
+
+            if (isPracticeMode) {
+                if (practiceTrialNumber < MOCK_TRIAL_COUNT) {
+                    // Case 1: More practice trials needed
+                    startNextPracticeTrial()
+                } else {
+                    // Case 2: Practice is complete - DON'T start anything yet
+                    isPracticeMode = false
+                    isTransitioning = true  // Block any new trials
+                    showTransitionScreen()
+                }
+            } else {
+                // Case 3: In experiment mode, start the next recorded trial
+                if (!isTransitioning) {  // Only if not waiting for user
+                    startExperimentTrial()
+                }
+            }
         }, INTER_TRIAL_DELAY_MS)
     }
 
@@ -664,6 +688,116 @@ class TargetActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * Executes the visual/audio sequence for a single trial (used by both practice and experiment).
+     */
+    private fun runTrial(trialState: TargetTrialState) {
+        if (isTrialInProgress) return
+
+        currentTrialState = trialState
+
+        initializeTrialState()
+        setupTargetBounds()
+        resetCirclesToNeutral()
+
+        // Add preparation delay before beeps
+        handler.postDelayed({
+            startBeepAndTargetSequence()
+        }, PREPARATION_DELAY_MS)
+    }
+
+    // ===========================
+    // Mock Trial
+    // ===========================
+
+    /**
+     * Starts the overall sequence, deciding between Practice and Experiment.
+     */
+    private fun startSequence() {
+        if (isPracticeMode) {
+            startNextPracticeTrial()
+        } else {
+            startExperimentTrial()
+        }
+    }
+
+    /**
+     * Runs the next trial in the practice phase.
+     */
+    private fun startNextPracticeTrial() {
+        // Increment the counter immediately
+        practiceTrialNumber++
+
+        // Force a simple trial: Target 0 (top-left) with CONCURRENT_SUPRA (easiest to understand)
+        val mockState = TargetTrialState(
+            trialCount = practiceTrialNumber,
+            totalTrials = MOCK_TRIAL_COUNT,
+            targetCircleIndex = 0, // Target 0 for consistency in practice
+            trialType = TrialType.CONCURRENT_SUPRA,
+            initialHue = TargetController.OBVIOUS_HUE_IDENTIFIER,
+            finalHue = null,
+            isExperimentFinished = false
+        )
+
+        updatePracticeTrialDisplay() // Update UI for practice
+        runTrial(mockState) // Execute the trial sequence
+    }
+
+    /**
+     * Shows an alert dialog to transition from Practice to Experiment.
+     */
+    private fun showTransitionScreen() {
+        // CRITICAL: Clear ALL pending handlers before showing dialog
+        handler.removeCallbacksAndMessages(null)
+
+        trialCounterText.text = "Practice Complete!"
+        trialCounterText.setBackgroundColor(
+            ContextCompat.getColor(this, android.R.color.holo_green_light)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("Ready for the Main Experiment")
+            .setMessage("You have finished the practice trial.\n\n" +
+                    "The main experiment will now begin. You will complete 15 trials.\n\n" +
+                    "Please place your finger on the central 'X'. " +
+                    "The first trial will start 3 seconds after you tap OK.")
+            .setPositiveButton("OK - Start Countdown") { dialog, _ ->
+                dialog.dismiss()
+                startExperimentCountdown()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    /**
+     * Starts a countdown before the first experiment trial.
+     */
+    private fun startExperimentCountdown() {
+        val totalSeconds = 3
+        var remainingSeconds = totalSeconds
+
+        val countdownRunnable = object : Runnable {
+            override fun run() {
+                if (remainingSeconds > 0) {
+                    trialCounterText.text = "STARTING IN $remainingSeconds..."
+                    trialCounterText.setBackgroundColor(
+                        ContextCompat.getColor(this@TargetActivity, android.R.color.holo_orange_light)
+                    )
+                    trialCounterText.textSize = 28f
+                    remainingSeconds--
+                    handler.postDelayed(this, 1000L)
+                } else {
+                    isTransitioning = false
+                    startExperimentTrial()
+                }
+            }
+        }
+
+        // Start the countdown
+        handler.post(countdownRunnable)
+    }
+
+
     // ===========================
     // Visual Updates
     // ===========================
@@ -690,10 +824,36 @@ class TargetActivity : AppCompatActivity() {
     }
 
     /**
-     * Updates the trial counter display.
+     * Updates the trial counter display for the practice phase.
+     */
+    private fun updatePracticeTrialDisplay() {
+        trialCounterText.text = "PRACTICE - Not recorded"
+
+        // Use distinctive yellow/orange background for practice
+        trialCounterText.setBackgroundColor(
+            ContextCompat.getColor(this, android.R.color.holo_orange_light)
+        )
+
+        trialCounterText.textSize = 24f
+        trialCounterText.setTypeface(null, android.graphics.Typeface.BOLD)
+    }
+
+
+
+    /**
+     * Updates the trial counter display for the main experiment phase.
      */
     private fun updateTrialDisplay() {
-        trialCounterText.text = "TRIAL ${currentTrialState.trialCount} OF ${currentTrialState.totalTrials}"
+        val countText = if (::currentTrialState.isInitialized) {
+            "TRIAL ${currentTrialState.trialCount} OF ${currentTrialState.totalTrials}"
+        } else {
+            "TRIAL 1 OF ${controller.getTotalTrials()}"
+        }
+
+        trialCounterText.text = countText
+
+        trialCounterText.setBackgroundResource(R.drawable.trial_counter_bg)
+
         trialCounterText.textSize = 24f
         trialCounterText.setTypeface(null, android.graphics.Typeface.BOLD)
     }
