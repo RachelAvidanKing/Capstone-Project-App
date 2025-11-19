@@ -31,89 +31,70 @@ import kotlinx.coroutines.launch
 /**
  * Main experiment activity for target-reaching trials.
  *
- * This activity implements the core experimental paradigm where participants
- * reach toward colored circles after audio cues. It tracks movement data,
- * reaction times, and target acquisition performance.
+ * Implements the experimental paradigm where participants reach toward colored
+ * circles after audio cues. Tracks movement data, reaction times, and target
+ * acquisition performance.
  *
  * ## Trial Types:
- * - **PRE_JND**: Target changes from JND threshold color to obvious color before go beep
- * - **PRE_SUPRA**: Target shows obvious color before go beep and remains
- * - **CONCURRENT_SUPRA**: Target shows obvious color at go beep
+ * - **PRE_JND**: JND threshold hint for 25ms at -350ms, then neutral, then obvious at beep
+ * - **PRE_SUPRA**: Obvious hint for 25ms at -350ms, then neutral, then obvious at beep
+ * - **CONCURRENT_SUPRA**: Obvious color appears at beep
  *
  * ## Timing Sequence:
  * 1. 1-second preparation period
  * 2. Four beeps at 700ms intervals
- * 3. Target appears based on trial type
- * 4. Fourth beep = GO signal
- * 5. Participant moves to target
- *
- * ## Critical Performance Features:
- * - Throttled hover detection to reduce CPU usage
- * - Efficient movement tracking with pre-allocated collections
- * - Non-blocking UI updates
- *
- * Part of the Boundary layer in Entity-Boundary-Control pattern.
+ * 3. Target hint appears at -350ms (PRE trials only) for 25ms
+ * 4. Target returns to neutral after hint
+ * 5. Fourth beep = GO signal
+ * 6. Target becomes obvious at beep (all trial types)
+ * 7. Participant moves to target
  */
 class TargetActivity : AppCompatActivity() {
 
-    // UI Components
     private lateinit var circles: List<View>
     private lateinit var centerX: TextView
     private lateinit var exitButton: Button
     private lateinit var trialCounterText: TextView
 
-    // Controllers and Trackers
     private lateinit var controller: TargetController
     private lateinit var currentTrialState: TargetTrialState
     private val movementTracker = MovementTracker()
 
-    // Data Management
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
     private lateinit var inactivityHelper: InactivityHelper
 
-    // Audio
     private var toneGenerator: ToneGenerator? = null
-
-    // Handlers
     private val handler = Handler(Looper.getMainLooper())
 
-    // State Management
     private var isTrialInProgress = false
-    // Practice Mode Constants and State
     private var isPracticeMode = true
     private var isTransitioning = false
     private var practiceTrialNumber = 0
     private var trialStartTime: Long = 0
 
-    // Hover Detection State
     private val hoveredCircles = mutableSetOf<Int>()
     private var lastHoverCheckTime = 0L
 
     companion object {
         private const val TAG = "TargetActivity"
 
-        // Timing Constants
         private const val BEEP_INTERVAL_MS = 700L
-        private const val PRE_BEEP_OFFSET_MS = 350L
+        private const val HINT_OFFSET_MS = 350L
+        private const val HINT_DURATION_MS = 25L
         private const val NUM_BEEPS = 4
         private const val PREPARATION_DELAY_MS = 1000L
         private const val INTER_TRIAL_DELAY_MS = 1500L
         private const val TRANSITION_PAUSE_MS = 3000L
 
-        // Visual Constants
         private const val ENLARGED_SCALE = 1.3f
-        private const val HOVER_THROTTLE_MS = 16L // ~60 FPS
+        private const val HOVER_THROTTLE_MS = 16L
 
-        // Special Hue Identifier
-        private const val OBVIOUS_HUE_IDENTIFIER = 999
-
-        private const val MOCK_TRIAL_COUNT = 1
+        private const val PRACTICE_TRIAL_COUNT = 1
     }
 
-    // Color mapping for different hues
     private val hueToColorRes = mapOf(
-        OBVIOUS_HUE_IDENTIFIER to R.color.turquoise_obvious,
+        TargetController.OBVIOUS_HUE_IDENTIFIER to R.color.turquoise_obvious,
         141 to R.color.blue_141, 142 to R.color.blue_142, 143 to R.color.blue_143,
         144 to R.color.blue_144, 145 to R.color.blue_145, 150 to R.color.blue_150,
         155 to R.color.blue_155, 160 to R.color.blue_160, 165 to R.color.blue_165,
@@ -130,9 +111,6 @@ class TargetActivity : AppCompatActivity() {
         loadParticipantAndStartExperiment()
     }
 
-    /**
-     * Initializes all view references.
-     */
     private fun initializeViews() {
         circles = listOf(
             findViewById(R.id.circleTopLeft),
@@ -151,23 +129,14 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Initializes the tone generator for audio feedback.
-     */
     private fun initializeAudio() {
         toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
     }
 
-    /**
-     * Initializes the inactivity helper for automatic logout.
-     */
     private fun initializeInactivityHelper() {
         inactivityHelper = InactivityHelper(this, repository)
     }
 
-    /**
-     * Loads participant data and initializes the experiment controller.
-     */
     private fun loadParticipantAndStartExperiment() {
         lifecycleScope.launch {
             val participant = repository.getCurrentParticipant()
@@ -189,9 +158,6 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Shows an error message and finishes the activity.
-     */
     private fun showErrorAndFinish(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         finish()
@@ -221,9 +187,6 @@ class TargetActivity : AppCompatActivity() {
         releaseResources()
     }
 
-    /**
-     * Releases all resources (audio, handlers, timers).
-     */
     private fun releaseResources() {
         toneGenerator?.release()
         handler.removeCallbacksAndMessages(null)
@@ -248,9 +211,6 @@ class TargetActivity : AppCompatActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    /**
-     * Handles touch down event (finger touches screen).
-     */
     private fun handleTouchDown(event: MotionEvent) {
         if (!isTrialInProgress) return
 
@@ -259,17 +219,12 @@ class TargetActivity : AppCompatActivity() {
         updateCenterXPosition(event.rawX, event.rawY)
     }
 
-    /**
-     * Handles touch move event (finger moves on screen).
-     * OPTIMIZATION: Throttles hover detection to reduce CPU usage.
-     */
     private fun handleTouchMove(event: MotionEvent) {
         if (!isTrialInProgress) return
 
         movementTracker.processMovement(event.rawX, event.rawY)
         updateCenterXPosition(event.rawX, event.rawY)
 
-        // CRITICAL OPTIMIZATION: Throttle hover detection
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastHoverCheckTime >= HOVER_THROTTLE_MS) {
             updateHoveredCircles(event.rawX, event.rawY)
@@ -277,9 +232,6 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Handles touch up event (finger releases from screen).
-     */
     private fun handleTouchUp(event: MotionEvent) {
         if (!isTrialInProgress) return
 
@@ -288,17 +240,11 @@ class TargetActivity : AppCompatActivity() {
         handleTrialComplete()
     }
 
-    /**
-     * Updates the center X cursor position to follow touch.
-     */
     private fun updateCenterXPosition(x: Float, y: Float) {
         centerX.x = x - centerX.width / 2
         centerX.y = y - centerX.height / 2
     }
 
-    /**
-     * Resets the center X cursor to screen center.
-     */
     private fun resetCenterXPosition() {
         centerX.post {
             val rootView = findViewById<View>(android.R.id.content)
@@ -307,26 +253,19 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Updates which circles are currently hovered.
-     * Uses efficient set operations to minimize animation calls.
-     */
     private fun updateHoveredCircles(x: Float, y: Float) {
         val newHoveredCircles = mutableSetOf<Int>()
 
-        // Identify currently hovered circles
         circles.forEachIndexed { index, circle ->
             if (isPointInCircle(x, y, circle)) {
                 newHoveredCircles.add(index)
             }
         }
 
-        // Enlarge newly hovered circles
         newHoveredCircles.subtract(hoveredCircles).forEach { index ->
             enlargeCircle(index)
         }
 
-        // Shrink circles no longer hovered
         hoveredCircles.subtract(newHoveredCircles).forEach { index ->
             resetCircleSize(index)
         }
@@ -335,10 +274,6 @@ class TargetActivity : AppCompatActivity() {
         hoveredCircles.addAll(newHoveredCircles)
     }
 
-    /**
-     * Checks if a point is within a circle's bounds.
-     * OPTIMIZATION: Inline method to reduce method call overhead.
-     */
     private inline fun isPointInCircle(x: Float, y: Float, circle: View): Boolean {
         val location = IntArray(2)
         circle.getLocationOnScreen(location)
@@ -348,9 +283,6 @@ class TargetActivity : AppCompatActivity() {
                 y <= location[1] + circle.height
     }
 
-    /**
-     * Enlarges a circle with animation.
-     */
     private fun enlargeCircle(index: Int) {
         if (index !in circles.indices) return
 
@@ -361,9 +293,6 @@ class TargetActivity : AppCompatActivity() {
             .start()
     }
 
-    /**
-     * Resets circle size with animation.
-     */
     private fun resetCircleSize(index: Int) {
         if (index !in circles.indices) return
 
@@ -374,9 +303,6 @@ class TargetActivity : AppCompatActivity() {
             .start()
     }
 
-    /**
-     * Resets all circle sizes.
-     */
     private fun resetAllCircleSizes() {
         circles.indices.forEach { resetCircleSize(it) }
         hoveredCircles.clear()
@@ -386,11 +312,7 @@ class TargetActivity : AppCompatActivity() {
     // Trial Management
     // ===========================
 
-    /**
-     * Starts a new trial or completes the experiment.
-     */
     private fun startExperimentTrial() {
-        // CRITICAL: Don't start if we're still transitioning
         if (isTrialInProgress || isTransitioning) return
 
         currentTrialState = controller.startNewTrial()
@@ -404,9 +326,6 @@ class TargetActivity : AppCompatActivity() {
         runTrial(currentTrialState)
     }
 
-    /**
-     * Initializes state for a new trial.
-     */
     private fun initializeTrialState() {
         isTrialInProgress = true
         trialStartTime = System.currentTimeMillis()
@@ -419,9 +338,6 @@ class TargetActivity : AppCompatActivity() {
                 "Target=${currentTrialState.targetCircleIndex}")
     }
 
-    /**
-     * Sets up target bounds for movement tracking.
-     */
     private fun setupTargetBounds() {
         if (currentTrialState.targetCircleIndex !in circles.indices) return
 
@@ -432,9 +348,6 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Sets the target bounds in the movement tracker.
-     */
     private fun setTargetBoundsForTracker(targetCircle: View) {
         val location = IntArray(2)
         targetCircle.getLocationOnScreen(location)
@@ -450,9 +363,6 @@ class TargetActivity : AppCompatActivity() {
         Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}")
     }
 
-    /**
-     * Sets all circle bounds for hover detection.
-     */
     private fun setAllCircleBoundsForTracker() {
         circles.forEachIndexed { index, circle ->
             val loc = IntArray(2)
@@ -468,16 +378,21 @@ class TargetActivity : AppCompatActivity() {
     }
 
     /**
-     * Starts the beep and target appearance sequence.
+     * Schedules beeps and target appearance/disappearance based on trial type.
+     *
+     * Timeline for PRE trials:
+     * - t=-350ms: Show hint color
+     * - t=-325ms: Return to neutral
+     * - t=0ms: Show obvious color + GO beep
+     *
+     * Timeline for CONCURRENT_SUPRA:
+     * - t=0ms: Show obvious color + GO beep
      */
     private fun startBeepAndTargetSequence() {
         scheduleBeeps()
         scheduleTargetAppearance()
     }
 
-    /**
-     * Schedules all beep sounds.
-     */
     private fun scheduleBeeps() {
         for (i in 1..NUM_BEEPS) {
             val beepTime = (i - 1) * BEEP_INTERVAL_MS
@@ -493,9 +408,6 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Plays the go beep and records its timestamp.
-     */
     private fun playGoBeepAndRecord() {
         val goTime = System.currentTimeMillis()
         movementTracker.recordGoBeep(goTime)
@@ -503,57 +415,49 @@ class TargetActivity : AppCompatActivity() {
         playGoBeep()
     }
 
-    /**
-     * Schedules target appearance based on trial type.
-     */
     private fun scheduleTargetAppearance() {
-        val fourthBeepTime = (NUM_BEEPS - 1) * BEEP_INTERVAL_MS
+        val goBeepTime = (NUM_BEEPS - 1) * BEEP_INTERVAL_MS
 
         when (currentTrialState.trialType) {
-            TrialType.PRE_JND -> schedulePreJndTarget(fourthBeepTime)
-            TrialType.PRE_SUPRA -> schedulePreSupraTarget(fourthBeepTime)
-            TrialType.CONCURRENT_SUPRA -> scheduleConcurrentSupraTarget(fourthBeepTime)
+            TrialType.PRE_JND, TrialType.PRE_SUPRA -> schedulePreTrialSequence(goBeepTime)
+            TrialType.CONCURRENT_SUPRA -> scheduleConcurrentTrial(goBeepTime)
         }
     }
 
     /**
-     * Schedules target appearance for PRE_JND trials.
+     * Schedules the PRE trial sequence:
+     * 1. Show hint at -350ms
+     * 2. Return to neutral at -325ms (after 25ms)
+     * 3. Show obvious at 0ms (GO beep)
      */
-    private fun schedulePreJndTarget(fourthBeepTime: Long) {
-        val initialShowTime = fourthBeepTime - PRE_BEEP_OFFSET_MS
+    private fun schedulePreTrialSequence(goBeepTime: Long) {
+        val hintTime = goBeepTime - HINT_OFFSET_MS
+        val neutralTime = hintTime + HINT_DURATION_MS
 
         handler.postDelayed({
-            showTarget(currentTrialState.targetCircleIndex, currentTrialState.initialHue)
-        }, initialShowTime)
+            currentTrialState.hintHue?.let { hue ->
+                showTarget(currentTrialState.targetCircleIndex, hue)
+            }
+        }, hintTime)
 
         handler.postDelayed({
-            showTarget(currentTrialState.targetCircleIndex, currentTrialState.finalHue!!)
-        }, fourthBeepTime)
+            showTarget(currentTrialState.targetCircleIndex, TargetController.NEUTRAL_HUE)
+        }, neutralTime)
+
+        handler.postDelayed({
+            showTarget(currentTrialState.targetCircleIndex, currentTrialState.finalHue)
+        }, goBeepTime)
     }
 
     /**
-     * Schedules target appearance for PRE_SUPRA trials.
+     * Schedules the CONCURRENT_SUPRA trial: show obvious at GO beep only.
      */
-    private fun schedulePreSupraTarget(fourthBeepTime: Long) {
-        val initialShowTime = fourthBeepTime - PRE_BEEP_OFFSET_MS
-
+    private fun scheduleConcurrentTrial(goBeepTime: Long) {
         handler.postDelayed({
-            showTarget(currentTrialState.targetCircleIndex, currentTrialState.initialHue)
-        }, initialShowTime)
+            showTarget(currentTrialState.targetCircleIndex, currentTrialState.finalHue)
+        }, goBeepTime)
     }
 
-    /**
-     * Schedules target appearance for CONCURRENT_SUPRA trials.
-     */
-    private fun scheduleConcurrentSupraTarget(fourthBeepTime: Long) {
-        handler.postDelayed({
-            showTarget(currentTrialState.targetCircleIndex, currentTrialState.initialHue)
-        }, fourthBeepTime)
-    }
-
-    /**
-     * Handles trial completion logic.
-     */
     private fun handleTrialComplete() {
         if (!isTrialInProgress) return
 
@@ -566,7 +470,6 @@ class TargetActivity : AppCompatActivity() {
 
         isTrialInProgress = false
 
-        // Save data first, THEN schedule next trial
         if (isPracticeMode) {
             Log.d(TAG, "PRACTICE TRIAL complete. Data not recorded.")
             scheduleNextTrial()
@@ -576,20 +479,16 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Validates that the trial can be completed.
-     * Returns false and resets if validation fails.
-     */
     private fun validateTrialCompletion(): Boolean {
         if (!movementTracker.hasSignificantMovement()) {
-            Log.w(TAG, "⚠️ No significant movement detected")
+            Log.w(TAG, "No significant movement detected")
             showToast("Please move to the target before releasing")
             resetForRetry()
             return false
         }
 
         if (!movementTracker.hasReachedCorrectTarget()) {
-            Log.w(TAG, "⚠️ Correct target not reached")
+            Log.w(TAG, "Correct target not reached")
             showToast("Please reach the correct target")
             resetForRetry()
             return false
@@ -598,45 +497,32 @@ class TargetActivity : AppCompatActivity() {
         return true
     }
 
-    /**
-     * Resets trial state for retry without counting as complete.
-     */
     private fun resetForRetry() {
         resetCenterXPosition()
         resetAllCircleSizes()
     }
 
-    /**
-     * Schedules the start of the next trial after a delay.
-     * This function now controls the transition from Practice to Experiment.
-     */
     private fun scheduleNextTrial() {
         handler.postDelayed({
             resetCenterXPosition()
             resetAllCircleSizes()
 
             if (isPracticeMode) {
-                if (practiceTrialNumber < MOCK_TRIAL_COUNT) {
-                    // Case 1: More practice trials needed
+                if (practiceTrialNumber < PRACTICE_TRIAL_COUNT) {
                     startNextPracticeTrial()
                 } else {
-                    // Case 2: Practice is complete - DON'T start anything yet
                     isPracticeMode = false
-                    isTransitioning = true  // Block any new trials
+                    isTransitioning = true
                     showTransitionScreen()
                 }
             } else {
-                // Case 3: In experiment mode, start the next recorded trial
-                if (!isTransitioning) {  // Only if not waiting for user
+                if (!isTransitioning) {
                     startExperimentTrial()
                 }
             }
         }, INTER_TRIAL_DELAY_MS)
     }
 
-    /**
-     * Saves trial data to the database.
-     */
     private fun saveTrialData(responseTime: Long) {
         lifecycleScope.launch {
             try {
@@ -650,18 +536,15 @@ class TargetActivity : AppCompatActivity() {
                 val trialResult = buildTrialResult(participantId, movementData, responseTime)
 
                 database.targetTrialDao().insert(trialResult)
-                Log.d(TAG, "✓ Trial ${currentTrialState.trialCount} data saved")
+                Log.d(TAG, "Trial ${currentTrialState.trialCount} data saved")
 
             } catch (e: Exception) {
-                Log.e(TAG, "✗ Error saving trial data", e)
+                Log.e(TAG, "Error saving trial data", e)
                 showToast("Error saving trial data")
             }
         }
     }
 
-    /**
-     * Builds a TargetTrialResult object from movement data.
-     */
     private fun buildTrialResult(
         participantId: String,
         movementData: com.example.capstone_project_application.control.TrialMovementData,
@@ -682,15 +565,12 @@ class TargetActivity : AppCompatActivity() {
             movementPath = movementData.movementPath,
             pathLength = movementData.pathLength,
             averageSpeed = movementData.averageSpeed,
-            initialHue = currentTrialState.initialHue,
+            initialHue = currentTrialState.hintHue,
             finalHue = currentTrialState.finalHue,
             goBeepTimestamp = movementData.goBeepTimestamp
         )
     }
 
-    /**
-     * Executes the visual/audio sequence for a single trial (used by both practice and experiment).
-     */
     private fun runTrial(trialState: TargetTrialState) {
         if (isTrialInProgress) return
 
@@ -700,19 +580,15 @@ class TargetActivity : AppCompatActivity() {
         setupTargetBounds()
         resetCirclesToNeutral()
 
-        // Add preparation delay before beeps
         handler.postDelayed({
             startBeepAndTargetSequence()
         }, PREPARATION_DELAY_MS)
     }
 
     // ===========================
-    // Mock Trial
+    // Practice Mode
     // ===========================
 
-    /**
-     * Starts the overall sequence, deciding between Practice and Experiment.
-     */
     private fun startSequence() {
         if (isPracticeMode) {
             startNextPracticeTrial()
@@ -721,33 +597,24 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Runs the next trial in the practice phase.
-     */
     private fun startNextPracticeTrial() {
-        // Increment the counter immediately
         practiceTrialNumber++
 
-        // Force a simple trial: Target 0 (top-left) with CONCURRENT_SUPRA (easiest to understand)
         val mockState = TargetTrialState(
             trialCount = practiceTrialNumber,
-            totalTrials = MOCK_TRIAL_COUNT,
-            targetCircleIndex = 0, // Target 0 for consistency in practice
+            totalTrials = PRACTICE_TRIAL_COUNT,
+            targetCircleIndex = 0,
             trialType = TrialType.CONCURRENT_SUPRA,
-            initialHue = TargetController.OBVIOUS_HUE_IDENTIFIER,
-            finalHue = null,
+            hintHue = null,
+            finalHue = TargetController.OBVIOUS_HUE_IDENTIFIER,
             isExperimentFinished = false
         )
 
-        updatePracticeTrialDisplay() // Update UI for practice
-        runTrial(mockState) // Execute the trial sequence
+        updatePracticeTrialDisplay()
+        runTrial(mockState)
     }
 
-    /**
-     * Shows an alert dialog to transition from Practice to Experiment.
-     */
     private fun showTransitionScreen() {
-        // CRITICAL: Clear ALL pending handlers before showing dialog
         handler.removeCallbacksAndMessages(null)
 
         trialCounterText.text = "Practice Complete!"
@@ -769,9 +636,6 @@ class TargetActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Starts a countdown before the first experiment trial.
-     */
     private fun startExperimentCountdown() {
         val totalSeconds = 3
         var remainingSeconds = totalSeconds
@@ -793,18 +657,13 @@ class TargetActivity : AppCompatActivity() {
             }
         }
 
-        // Start the countdown
         handler.post(countdownRunnable)
     }
-
 
     // ===========================
     // Visual Updates
     // ===========================
 
-    /**
-     * Shows a target circle with the specified hue.
-     */
     private fun showTarget(index: Int, hue: Int) {
         if (index in circles.indices) {
             val colorRes = hueToColorRes[hue] ?: R.color.blue_140
@@ -814,35 +673,21 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Resets all circles to neutral color.
-     */
     private fun resetCirclesToNeutral() {
         val color = ContextCompat.getColor(this, R.color.blue_140)
         val colorState = android.content.res.ColorStateList.valueOf(color)
         circles.forEach { it.backgroundTintList = colorState }
     }
 
-    /**
-     * Updates the trial counter display for the practice phase.
-     */
     private fun updatePracticeTrialDisplay() {
         trialCounterText.text = "PRACTICE - Not recorded"
-
-        // Use distinctive yellow/orange background for practice
         trialCounterText.setBackgroundColor(
             ContextCompat.getColor(this, android.R.color.holo_orange_light)
         )
-
         trialCounterText.textSize = 24f
         trialCounterText.setTypeface(null, android.graphics.Typeface.BOLD)
     }
 
-
-
-    /**
-     * Updates the trial counter display for the main experiment phase.
-     */
     private fun updateTrialDisplay() {
         val countText = if (::currentTrialState.isInitialized) {
             "TRIAL ${currentTrialState.trialCount} OF ${currentTrialState.totalTrials}"
@@ -851,9 +696,7 @@ class TargetActivity : AppCompatActivity() {
         }
 
         trialCounterText.text = countText
-
         trialCounterText.setBackgroundResource(R.drawable.trial_counter_bg)
-
         trialCounterText.textSize = 24f
         trialCounterText.setTypeface(null, android.graphics.Typeface.BOLD)
     }
@@ -862,16 +705,10 @@ class TargetActivity : AppCompatActivity() {
     // Audio Methods
     // ===========================
 
-    /**
-     * Plays a regular beep sound.
-     */
     private fun playBeep() {
         toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
     }
 
-    /**
-     * Plays the "GO" beep sound (different tone).
-     */
     private fun playGoBeep() {
         toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 300)
     }
@@ -880,9 +717,6 @@ class TargetActivity : AppCompatActivity() {
     // Exit Handling
     // ===========================
 
-    /**
-     * Shows exit confirmation dialog.
-     */
     private fun showExitConfirmationDialog() {
         AlertDialog.Builder(this)
             .setTitle("Exit Experiment?")
@@ -895,9 +729,6 @@ class TargetActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Handles exit by clearing data and returning to login.
-     */
     private fun handleExit() {
         lifecycleScope.launch {
             try {
@@ -916,9 +747,6 @@ class TargetActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Navigates to login screen with cleared back stack.
-     */
     private fun navigateToLogin() {
         val intent = Intent(this, LoginActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -931,40 +759,34 @@ class TargetActivity : AppCompatActivity() {
     // Experiment Completion
     // ===========================
 
-    /**
-     * Completes the experiment and triggers data upload.
-     */
     private fun completeExperiment() {
-        Log.d(TAG, "╔════════════════════════════════════════╗")
+        Log.d(TAG, "═══════════════════════════════════════════")
         Log.d(TAG, "TARGET EXPERIMENT COMPLETED")
-        Log.d(TAG, "╚════════════════════════════════════════╝")
+        Log.d(TAG, "═══════════════════════════════════════════")
 
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
                 val trialCount = database.targetTrialDao()
                     .getTrialCountForParticipant(participantId)
-                Log.d(TAG, "✓ Total trials saved locally: $trialCount")
+                Log.d(TAG, "Total trials saved locally: $trialCount")
 
-                Log.d(TAG, "→ Triggering Firebase upload...")
+                Log.d(TAG, "Triggering Firebase upload...")
                 try {
                     WorkScheduler.triggerImmediateUpload(this@TargetActivity)
-                    Log.d(TAG, "✓ Upload job scheduled successfully")
+                    Log.d(TAG, "Upload job scheduled successfully")
                 } catch (e: Exception) {
-                    Log.w(TAG, "⚠ Could not schedule upload (will retry later): ${e.message}")
+                    Log.w(TAG, "Could not schedule upload (will retry later): ${e.message}")
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "✗ Error during completion processing", e)
+                Log.e(TAG, "Error during completion processing", e)
             }
         }
 
         navigateToCompletionScreen()
     }
 
-    /**
-     * Navigates to completion screen.
-     */
     private fun navigateToCompletionScreen() {
         val intent = Intent(this, CompletionActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -973,9 +795,6 @@ class TargetActivity : AppCompatActivity() {
         finish()
     }
 
-    /**
-     * Helper method to show toast messages.
-     */
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
