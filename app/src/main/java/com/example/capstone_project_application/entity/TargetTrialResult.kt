@@ -33,7 +33,7 @@ data class TargetTrialResult(
     val averageSpeed: Float, // Average speed during movement
 
     // Visual stimulus information
-    val initialHue: Int,
+    val initialHue: Int?,
     val finalHue: Int?, // Only for PRE_JND trials
     val goBeepTimestamp: Long, // When the 4th beep played
 
