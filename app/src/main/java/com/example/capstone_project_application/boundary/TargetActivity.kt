@@ -76,6 +76,9 @@ class TargetActivity : AppCompatActivity() {
     private val hoveredCircles = mutableSetOf<Int>()
     private var lastHoverCheckTime = 0L
 
+    private var hintResetRunnable: Runnable? = null
+    private var finalTargetRunnable: Runnable? = null
+
     companion object {
         private const val TAG = "TargetActivity"
 
@@ -190,6 +193,8 @@ class TargetActivity : AppCompatActivity() {
     private fun releaseResources() {
         toneGenerator?.release()
         handler.removeCallbacksAndMessages(null)
+        hintResetRunnable = null
+        finalTargetRunnable = null
         inactivityHelper.stopTimer()
     }
 
@@ -382,8 +387,8 @@ class TargetActivity : AppCompatActivity() {
      *
      * Timeline for PRE trials:
      * - t=-350ms: Show hint color
-     * - t=-325ms: Return to neutral
-     * - t=0ms: Show obvious color + GO beep
+     * - t=-325ms: Return to neutral (guaranteed sequencing)
+     * - t=0ms: Show obvious color + GO beep (guaranteed after neutral)
      *
      * Timeline for CONCURRENT_SUPRA:
      * - t=0ms: Show obvious color + GO beep
@@ -425,28 +430,37 @@ class TargetActivity : AppCompatActivity() {
     }
 
     /**
-     * Schedules the PRE trial sequence:
-     * 1. Show hint at -350ms
-     * 2. Return to neutral at -325ms (after 25ms)
-     * 3. Show obvious at 0ms (GO beep)
+     * Schedules the PRE trial sequence with guaranteed ordering.
+     *
+     * Uses chained runnables to ensure:
+     * 1. Hint appears first
+     * 2. Neutral ALWAYS follows hint (even if handler is delayed)
+     * 3. Final obvious color ALWAYS follows neutral
      */
     private fun schedulePreTrialSequence(goBeepTime: Long) {
         val hintTime = goBeepTime - HINT_OFFSET_MS
-        val neutralTime = hintTime + HINT_DURATION_MS
+        val targetIndex = currentTrialState.targetCircleIndex
+        val hintHue = currentTrialState.hintHue
+        val finalHue = currentTrialState.finalHue
+
+        hintResetRunnable = Runnable {
+            Log.d(TAG, "PRE sequence: Showing neutral (after hint)")
+            showTarget(targetIndex, TargetController.NEUTRAL_HUE)
+        }
+
+        finalTargetRunnable = Runnable {
+            handler.removeCallbacks(hintResetRunnable!!)
+            Log.d(TAG, "PRE sequence: Showing final obvious color")
+            showTarget(targetIndex, finalHue)
+        }
 
         handler.postDelayed({
-            currentTrialState.hintHue?.let { hue ->
-                showTarget(currentTrialState.targetCircleIndex, hue)
-            }
+            Log.d(TAG, "PRE sequence: Showing hint (hue=$hintHue)")
+            hintHue?.let { showTarget(targetIndex, it) }
+            handler.postDelayed(hintResetRunnable!!, HINT_DURATION_MS)
         }, hintTime)
 
-        handler.postDelayed({
-            showTarget(currentTrialState.targetCircleIndex, TargetController.NEUTRAL_HUE)
-        }, neutralTime)
-
-        handler.postDelayed({
-            showTarget(currentTrialState.targetCircleIndex, currentTrialState.finalHue)
-        }, goBeepTime)
+        handler.postDelayed(finalTargetRunnable!!, goBeepTime)
     }
 
     /**
@@ -454,6 +468,7 @@ class TargetActivity : AppCompatActivity() {
      */
     private fun scheduleConcurrentTrial(goBeepTime: Long) {
         handler.postDelayed({
+            Log.d(TAG, "CONCURRENT sequence: Showing obvious color")
             showTarget(currentTrialState.targetCircleIndex, currentTrialState.finalHue)
         }, goBeepTime)
     }
@@ -469,6 +484,9 @@ class TargetActivity : AppCompatActivity() {
         Log.d(TAG, "Trial complete - Correct target reached")
 
         isTrialInProgress = false
+
+        hintResetRunnable?.let { handler.removeCallbacks(it) }
+        finalTargetRunnable?.let { handler.removeCallbacks(it) }
 
         if (isPracticeMode) {
             Log.d(TAG, "PRACTICE TRIAL complete. Data not recorded.")
