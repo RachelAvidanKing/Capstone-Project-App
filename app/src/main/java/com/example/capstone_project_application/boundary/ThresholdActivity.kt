@@ -340,6 +340,7 @@ class ThresholdActivity : AppCompatActivity() {
 
             binding.tvTitle.text = "Test Complete!"
             binding.btnN.visibility = android.view.View.VISIBLE
+            binding.tvQuestion.visibility = android.view.View.GONE
             binding.btnN.setOnClickListener { navigateToTargetExplanation() }
         }
     }
