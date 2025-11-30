@@ -27,7 +27,7 @@
         android:id="@+id/tvExplanation"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="On the next page, you will need to select the lighter color between two options — A or B.\nYou will need to perform this test 100 times in total.\n\nGood luck! :)"
+        android:text="On the next page, you will see four squares.\n Two of them will be grayed out at any given time. Of the two more vibrent blue squares, you need to press on the square with the lighter color between these two options.\nYou will need to perform this test 100 times in total.\n\nGood luck! :)"
         android:textSize="26sp"
         android:textStyle="bold"
         android:textColor="@android:color/black"
