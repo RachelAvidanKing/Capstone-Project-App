@@ -41,3 +41,6 @@ python-analysis/serviceAccountKey.json
 python-analysis/analysis_outputs/
 python-analysis/data_exports/
 python-analysis/.ipynb_checkpoints/
+.venv/
+venv/
+analysis_outputs
