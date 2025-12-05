@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.example.capstone_project_application.entity.AppDatabase
-import com.example.capstone_project_application.entity.MovementDataPoint
 import com.example.capstone_project_application.entity.Participant
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -380,85 +379,6 @@ class DataRepository(
             } catch (e: Exception) {
                 Log.e(TAG, "Error clearing incomplete data", e)
             }
-        }
-    }
-
-    // ===========================
-    // Movement Data Operations
-    // ===========================
-
-    /**
-     * Inserts a movement data point for the current participant.
-     *
-     * @param latitude GPS latitude
-     * @param longitude GPS longitude
-     * @param altitude GPS altitude in meters
-     * @param speed Movement speed in m/s
-     * @param accelX Accelerometer X-axis value
-     * @param accelY Accelerometer Y-axis value
-     * @param accelZ Accelerometer Z-axis value
-     * @param gyroX Gyroscope X-axis value (default: 0.0f)
-     * @param gyroY Gyroscope Y-axis value (default: 0.0f)
-     * @param gyroZ Gyroscope Z-axis value (default: 0.0f)
-     */
-    suspend fun insertMovementData(
-        latitude: Double,
-        longitude: Double,
-        altitude: Double,
-        speed: Float,
-        accelX: Float,
-        accelY: Float,
-        accelZ: Float,
-        gyroX: Float = 0.0f,
-        gyroY: Float = 0.0f,
-        gyroZ: Float = 0.0f
-    ) {
-        withContext(Dispatchers.IO) {
-            val movementData = MovementDataPoint(
-                participantId = getCurrentParticipantId(),
-                timestamp = System.currentTimeMillis(),
-                latitude = latitude,
-                longitude = longitude,
-                altitude = altitude,
-                speed = speed,
-                accelX = accelX,
-                accelY = accelY,
-                accelZ = accelZ,
-                gyroX = gyroX,
-                gyroY = gyroY,
-                gyroZ = gyroZ
-            )
-            database.movementDataDao().insert(movementData)
-        }
-    }
-
-    /**
-     * Retrieves movement data filtered by participant demographics.
-     * Useful for analyzing patterns across demographic groups.
-     *
-     * @param gender Gender filter
-     * @param minAge Minimum age (inclusive)
-     * @param maxAge Maximum age (inclusive)
-     * @return List of matching movement data points
-     */
-    suspend fun getMovementDataByDemographics(
-        gender: String,
-        minAge: Int,
-        maxAge: Int
-    ): List<MovementDataPoint> {
-        return withContext(Dispatchers.IO) {
-            database.movementDataDao().getMovementDataByDemographics(gender, minAge, maxAge)
-        }
-    }
-
-    /**
-     * Counts the number of unsynced movement data points.
-     *
-     * @return Count of unsynced data points
-     */
-    suspend fun getUnsyncedDataCount(): Int {
-        return withContext(Dispatchers.IO) {
-            database.movementDataDao().getAllUnsyncedData().size
         }
     }
 }
