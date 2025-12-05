@@ -14,13 +14,20 @@ from datetime import datetime
 class FirebaseConnector:
     """Manages connection to Firebase and data retrieval"""
     
-    def __init__(self, credentials_path: str = 'serviceAccountKey.json'):
+    DEFAULT_CREDENTIALS_FILENAME = 'serviceAccountKey.json'
+
+    def __init__(self, credentials_path=None):
         """
         Initialize Firebase connection
         
         Args:
             credentials_path: Path to Firebase service account key JSON
         """
+        if credentials_path is None:
+            current_script_dir = os.path.dirname(os.path.abspath(__file__))
+            credentials_path = os.path.join(current_script_dir, self.DEFAULT_CREDENTIALS_FILENAME)
+            print(f"Attempting to load credentials from: {credentials_path}")
+
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_path)
             firebase_admin.initialize_app(cred)
@@ -203,13 +210,17 @@ class FirebaseConnector:
 
 
 # Convenience function for quick data loading
-def load_data(credentials_path: str = 'serviceAccountKey.json') -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_data(credentials_filename) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Quick function to load all data
     
     Returns:
         (participants_df, trials_df)
     """
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    credentials_path = os.path.join(current_dir, credentials_filename)
+
     connector = FirebaseConnector(credentials_path)
     return connector.fetch_all_data()
 

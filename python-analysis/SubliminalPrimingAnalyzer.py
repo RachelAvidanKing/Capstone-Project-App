@@ -509,13 +509,17 @@ class SubliminalPrimingAnalyzer:
 
 
 def main():
+    credentials_filename = "serviceAccountKey.json"
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    credentials_path = os.path.join(current_dir, credentials_filename)
+
     """Run enhanced analysis"""
     print("\n" + "="*80)
     print("SUBLIMINAL PRIMING ANALYSIS - REACHING MOVEMENT STUDY")
     print("="*80)
     
     # Load data
-    participants_df, trials_df = load_data()
+    participants_df, trials_df = load_data(credentials_path)
     
     if trials_df.empty:
         print("\n❌ No trial data available")
