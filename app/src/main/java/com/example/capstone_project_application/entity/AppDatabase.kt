@@ -12,13 +12,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * This class ties together the entities and DAOs.
  */
 @Database(
-    entities = [MovementDataPoint::class, Participant::class, TargetTrialResult::class],
-    version = 5, // CHANGED: Incremented version from 4 to 5
+    entities = [Participant::class, TargetTrialResult::class],
+    version = 6, // CHANGED: Incremented version from 5 to 6
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
-    abstract fun movementDataDao(): MovementLocalDataSource
     abstract fun participantDao(): ParticipantLocalDataSource
     abstract fun targetTrialDao(): TargetTrialLocalDataSource
 
@@ -43,7 +42,8 @@ abstract class AppDatabase : RoomDatabase() {
         // Migration from version 3 to 4 - Add target_trial_results table
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("""
+                db.execSQL(
+                    """
                     CREATE TABLE IF NOT EXISTS target_trial_results (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         participantId TEXT NOT NULL,
@@ -67,15 +67,17 @@ abstract class AppDatabase : RoomDatabase() {
                         goBeepTimestamp INTEGER NOT NULL,
                         isUploaded INTEGER NOT NULL DEFAULT 0
                     )
-                """)
+                """
+                )
             }
         }
 
 
+        // Migration from version 4 to 5 - Change target_trial_results table (delete selectedIndex and isCorrect)
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Step 1: Create a new temporary table with the updated schema (without selectedIndex and isCorrect)
-                db.execSQL("""
+                db.execSQL(
+                    """
             CREATE TABLE IF NOT EXISTS target_trial_results_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 participantId TEXT NOT NULL,
@@ -97,10 +99,11 @@ abstract class AppDatabase : RoomDatabase() {
                 goBeepTimestamp INTEGER NOT NULL,
                 isUploaded INTEGER NOT NULL DEFAULT 0
             )
-        """)
+        """
+                )
 
-                // Step 2: Copy data from old table to new table (excluding selectedIndex and isCorrect columns)
-                db.execSQL("""
+                db.execSQL(
+                    """
             INSERT INTO target_trial_results_new 
             (id, participantId, trialNumber, trialType, targetIndex, 
              trialStartTimestamp, firstMovementTimestamp, targetReachedTimestamp, 
@@ -114,28 +117,42 @@ abstract class AppDatabase : RoomDatabase() {
              movementPath, pathLength, averageSpeed, initialHue, finalHue,
              goBeepTimestamp, isUploaded
             FROM target_trial_results
-        """)
+        """
+                )
 
-                // Step 3: Drop the old table
+
                 db.execSQL("DROP TABLE target_trial_results")
 
-                // Step 4: Rename the new table to the original name
                 db.execSQL("ALTER TABLE target_trial_results_new RENAME TO target_trial_results")
             }
         }
 
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "capstone_database"
-                )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-                    .build()
-                INSTANCE = instance
-                instance
+
+        // Migration from version 5 to 6 - Drop MovementDataPoint table
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS MovementDataPoint")
             }
         }
-    }
+
+            fun getDatabase(context: Context): AppDatabase {
+                return INSTANCE ?: synchronized(this) {
+                    val instance = Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        "capstone_database"
+                    )
+                        .addMigrations(
+                            MIGRATION_1_2,
+                            MIGRATION_2_3,
+                            MIGRATION_3_4,
+                            MIGRATION_4_5,
+                            MIGRATION_5_6
+                        )
+                        .build()
+                    INSTANCE = instance
+                    instance
+                }
+            }
+        }
 }
