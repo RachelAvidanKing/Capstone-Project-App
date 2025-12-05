@@ -51,10 +51,6 @@ object DebugHelper {
                 Log.d(TAG, "    ... and ${unsyncedTrials.size - 3} more")
             }
 
-            // Movement Data
-            val unsyncedMovement = db.movementDataDao().getAllUnsyncedData()
-            Log.d(TAG, "MOVEMENT DATA: ${unsyncedMovement.size} unsynced")
-
             Log.d(TAG, "════════════════════════════════════════")
         }
     }

@@ -6,7 +6,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.capstone_project_application.entity.AppDatabase
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.WriteBatch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -69,7 +68,6 @@ class DataUploadWorker(
 
                 uploadParticipants()
                 uploadTargetTrials()
-                uploadMovementData()
 
                 Log.d(TAG, "═══════════════════════════════════════════")
                 Log.d(TAG, "UPLOAD JOB COMPLETED SUCCESSFULLY")
@@ -180,7 +178,8 @@ class DataUploadWorker(
 
         for (trial in trials) {
             val trialMap = buildTrialMap(trial)
-            val newTrialRef = trialsCollection.document() // Auto-generate ID
+            val documentId = "trial_${trial.trialNumber}"
+            val newTrialRef = trialsCollection.document(documentId)
             batch.set(newTrialRef, trialMap)
         }
 
@@ -249,81 +248,5 @@ class DataUploadWorker(
         }
 
         return movementPathList
-    }
-
-    // ===========================
-    // Movement Data Upload
-    // ===========================
-
-    /**
-     * Uploads unsynced movement data using Firestore batch writes.
-     * CRITICAL OPTIMIZATION: Batches up to 450 operations per commit.
-     */
-    private suspend fun uploadMovementData() {
-        val unsyncedData = roomDb.movementDataDao().getAllUnsyncedData()
-
-        if (unsyncedData.isEmpty()) {
-            Log.d(TAG, "→ No movement data to upload")
-            return
-        }
-
-        Log.d(TAG, "→ Uploading ${unsyncedData.size} movement data point(s) using batch writes")
-
-        val dataByParticipant = unsyncedData.groupBy { it.participantId }
-        val uploadedDataIds = mutableListOf<Int>()
-
-        for ((participantId, movementDataList) in dataByParticipant) {
-            Log.d(TAG, "  → Uploading ${movementDataList.size} data points for " +
-                    "participant ${participantId.take(8)}...")
-
-            // Upload in chunks
-            movementDataList.chunked(BATCH_SIZE).forEach { chunk ->
-                uploadMovementDataBatch(participantId, chunk)
-                uploadedDataIds.addAll(chunk.map { it.id })
-            }
-        }
-
-        // Mark all uploaded data as synced
-        roomDb.movementDataDao().markAsUploaded(uploadedDataIds)
-
-        Log.d(TAG, "✓ All movement data uploaded and marked as synced")
-    }
-
-    /**
-     * Uploads a batch of movement data for a single participant.
-     *
-     * @param participantId The participant ID
-     * @param dataPoints List of movement data points (max BATCH_SIZE)
-     */
-    private suspend fun uploadMovementDataBatch(
-        participantId: String,
-        dataPoints: List<com.example.capstone_project_application.entity.MovementDataPoint>
-    ) {
-        val batch = firestore.batch()
-        val participantRef = firestore.collection(COLLECTION_PARTICIPANTS).document(participantId)
-        val movementCollection = participantRef.collection(COLLECTION_MOVEMENT_DATA)
-
-        for (movementData in dataPoints) {
-            val dataMap = mapOf(
-                "timestamp" to movementData.timestamp,
-                "latitude" to movementData.latitude,
-                "longitude" to movementData.longitude,
-                "altitude" to movementData.altitude,
-                "speed" to movementData.speed,
-                "accelX" to movementData.accelX,
-                "accelY" to movementData.accelY,
-                "accelZ" to movementData.accelZ,
-                "gyroX" to movementData.gyroX,
-                "gyroY" to movementData.gyroY,
-                "gyroZ" to movementData.gyroZ
-            )
-
-            val newDataRef = movementCollection.document()
-            batch.set(newDataRef, dataMap)
-        }
-
-        // Commit entire batch atomically
-        batch.commit().await()
-        Log.d(TAG, "    ✓ Batch of ${dataPoints.size} movement data points uploaded")
     }
 }
