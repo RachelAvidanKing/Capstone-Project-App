@@ -14,13 +14,20 @@ from datetime import datetime
 class FirebaseConnector:
     """Manages connection to Firebase and data retrieval"""
     
-    def __init__(self, credentials_path: str = 'serviceAccountKey.json'):
+    DEFAULT_CREDENTIALS_FILENAME = 'serviceAccountKey.json'
+
+    def __init__(self, credentials_path=None):
         """
         Initialize Firebase connection
         
         Args:
             credentials_path: Path to Firebase service account key JSON
         """
+        if credentials_path is None:
+            current_script_dir = os.path.dirname(os.path.abspath(__file__))
+            credentials_path = os.path.join(current_script_dir, self.DEFAULT_CREDENTIALS_FILENAME)
+            print(f"Attempting to load credentials from: {credentials_path}")
+
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_path)
             firebase_admin.initialize_app(cred)
@@ -148,11 +155,18 @@ class FirebaseConnector:
     def save_to_csv(self, participants_df: pd.DataFrame, trials_df: pd.DataFrame, 
                     output_dir: str = 'data_exports'):
         """Save dataframes to CSV for backup/external analysis"""
+
+        
         os.makedirs(output_dir, exist_ok=True)
+        participants_dir = os.path.join(output_dir, 'participants')
+        trials_dir = os.path.join(output_dir, 'trials')
+        os.makedirs(participants_dir, exist_ok=True)
+        os.makedirs(trials_dir, exist_ok=True)
+        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        participants_file = f"{output_dir}/participants_{timestamp}.csv"
-        trials_file = f"{output_dir}/trials_{timestamp}.csv"
+        participants_file = os.path.join(participants_dir, f"participants_{timestamp}.csv")
+        trials_file = os.path.join(trials_dir, f"trials_{timestamp}.csv")
         
         # For trials, convert movementPath to JSON string for CSV compatibility
         trials_export = trials_df.copy()
@@ -203,13 +217,17 @@ class FirebaseConnector:
 
 
 # Convenience function for quick data loading
-def load_data(credentials_path: str = 'serviceAccountKey.json') -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_data(credentials_filename) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Quick function to load all data
     
     Returns:
         (participants_df, trials_df)
     """
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    credentials_path = os.path.join(current_dir, credentials_filename)
+
     connector = FirebaseConnector(credentials_path)
     return connector.fetch_all_data()
 
@@ -223,22 +241,24 @@ if __name__ == "__main__":
     try:
         connector = FirebaseConnector()
         
-        # Fetch and display summary
-        summary = connector.get_trial_summary()
+        participants_df, trials_df = connector.fetch_all_data()
+        
         print("\n" + "=" * 60)
         print("DATA SUMMARY")
         print("=" * 60)
-        print(f"Total Participants: {summary['total_participants']}")
-        print(f"Total Trials: {summary['total_trials']}")
-        print(f"\nTrials by Type:")
-        for trial_type, count in summary['trials_by_type'].items():
-            print(f"  {trial_type}: {count}")
-        print(f"\nParticipants by Gender:")
-        for gender, count in summary['participants_by_gender'].items():
-            print(f"  {gender}: {count}")
+        print(f"Total Participants: {len(participants_df)}")
+        print(f"Total Trials: {len(trials_df)}")
+        if not trials_df.empty:
+            print(f"\nTrials by Type:")
+            for trial_type, count in trials_df['trialType'].value_counts().items():
+                print(f"  {trial_type}: {count}")
+        
+        if not participants_df.empty:
+            print(f"\nParticipants by Gender:")
+            for gender, count in participants_df['gender'].value_counts().items():
+                print(f"  {gender}: {count}")
         
         # Export data
-        participants_df, trials_df = connector.fetch_all_data()
         if not participants_df.empty:
             connector.save_to_csv(participants_df, trials_df)
         
