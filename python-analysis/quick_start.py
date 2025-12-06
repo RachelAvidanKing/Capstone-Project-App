@@ -506,7 +506,6 @@ WHY USE IT?
   • Great for exploring data interactively
   • You can modify code and re-run without starting over
   • Perfect for learning and experimentation
-  • Your supervisor might want to try different analyses
 
 HOW TO GET STARTED:
 
@@ -546,7 +545,6 @@ TIPS:
 
 LEARNING RESOURCES:
   • https://jupyter.org/try
-  • YouTube: "Jupyter Notebook Tutorial for Beginners"
   • Built-in help: Press H in Jupyter for keyboard shortcuts
 
 If you're happy with the automated analysis (option 3), you don't need
