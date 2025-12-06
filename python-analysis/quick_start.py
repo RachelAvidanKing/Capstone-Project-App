@@ -75,17 +75,6 @@ def load_data_with_cache(force_reload=False):
         trials_df = _data_cache['trials']
     
     return participants_df, trials_df
-    """Check if Firebase credentials exist"""
-    if not os.path.exists(DEFAULT_CREDENTIALS_FILENAME):
-        print("❌ Firebase credentials not found!")
-        print(f"\nLooking for: {DEFAULT_CREDENTIALS_FILENAME}")
-        print("\nPlease:")
-        print("1. Go to Firebase Console → Project Settings → Service Accounts")
-        print("2. Click 'Generate new private key'")
-        print(f"3. Save the file as '{DEFAULT_CREDENTIALS_FILENAME}' in this folder")
-        return False
-    
-    return True
 
 def print_menu():
     """Display menu options"""
@@ -298,33 +287,44 @@ def analyze_participant():
             print("\n⚠️  No participants found")
             return False
         
+        # Show all participants with pagination
+        print(f"\nTotal participants: {len(participants_df)}")
         print("\nAvailable participants:")
-        for idx, row in enumerate(participants_df.head(10).itertuples(), 1):
+        
+        for idx, row in enumerate(participants_df.itertuples(), 1):
             pid = row.participantId
             p_trials = len(trials_df[trials_df['participantId'] == pid])
             age = getattr(row, 'age', 'N/A')
             gender = getattr(row, 'gender', 'N/A')
             print(f"  {idx}. {pid} ({p_trials} trials, Age: {age}, Gender: {gender})")
         
-        if len(participants_df) > 10:
-            print(f"  ... and {len(participants_df) - 10} more")
-        
-        choice = input("\nEnter participant ID or number (1-{}): ".format(len(participants_df))).strip()
+        print("\n" + "-"*70)
+        choice = input(f"\nEnter participant number (1-{len(participants_df)}) or full ID: ").strip()
         
         # Determine participant_id
         participant_id = None
         
-        # Try as number first
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(participants_df):
-                participant_id = participants_df.iloc[idx]['participantId']
-            else:
-                print(f"❌ Number out of range (1-{len(participants_df)})")
-                return False
-        except ValueError:
-            # Not a number, treat as participant ID
+        # Check if input matches a participant ID directly first (before trying as number)
+        if choice in participants_df['participantId'].values:
             participant_id = choice
+            print(f"Selected by ID: {participant_id}")
+        else:
+            # Try as number
+            try:
+                idx = int(choice)
+                if 1 <= idx <= len(participants_df):
+                    participant_id = participants_df.iloc[idx - 1]['participantId']
+                    print(f"Selected by number: {participant_id}")
+                else:
+                    print(f"❌ Number out of range. Please enter 1-{len(participants_df)}")
+                    return False
+            except ValueError:
+                # Not a number and not a valid ID
+                print(f"❌ Invalid input: '{choice}'")
+                print(f"\nPlease enter either:")
+                print(f"  - A number from 1 to {len(participants_df)}")
+                print(f"  - A valid participant ID from the list above")
+                return False
         
         # Get participant data
         p_data = participants_df[participants_df['participantId'] == participant_id]
@@ -361,9 +361,14 @@ def analyze_participant():
                 if len(mt_data) > 0:
                     print(f"  Avg movement time: {mt_data.mean():.1f} ms")
         
+        # Create organized directory structure
+        base_dir = 'data_exports/participant_reports'
+        participant_dir = os.path.join(base_dir, participant_id)
+        os.makedirs(participant_dir, exist_ok=True)
+        
         # Save participant report
-        filename = f"participant_{participant_id}_report.txt"
-        with open(filename, 'w') as f:
+        report_file = os.path.join(participant_dir, f'{participant_id}_report.txt')
+        with open(report_file, 'w') as f:
             f.write(f"Participant Report: {participant_id}\n")
             f.write(f"Generated: {datetime.now()}\n\n")
             f.write(f"Demographics:\n")
@@ -380,12 +385,14 @@ def analyze_participant():
                 else:
                     f.write("No trial data available\n")
         
-        print(f"\n✅ Report saved to: {filename}")
+        print(f"\n✅ Report saved to: {report_file}")
         
         # Export trials to CSV
-        csv_file = f"participant_{participant_id}_trials.csv"
+        csv_file = os.path.join(participant_dir, f'{participant_id}_trials.csv')
         p_trials.to_csv(csv_file, index=False)
         print(f"✅ Trials exported to: {csv_file}")
+        
+        print(f"\n📁 All files saved in: {participant_dir}")
         
         return True
         
@@ -499,7 +506,8 @@ WHY USE IT?
   • Great for exploring data interactively
   • You can modify code and re-run without starting over
   • Perfect for learning and experimentation
-  
+  • Your supervisor might want to try different analyses
+
 HOW TO GET STARTED:
 
 1. Install Jupyter (if you haven't already):
@@ -538,6 +546,7 @@ TIPS:
 
 LEARNING RESOURCES:
   • https://jupyter.org/try
+  • YouTube: "Jupyter Notebook Tutorial for Beginners"
   • Built-in help: Press H in Jupyter for keyboard shortcuts
 
 If you're happy with the automated analysis (option 3), you don't need

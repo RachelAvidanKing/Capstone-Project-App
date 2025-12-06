@@ -155,11 +155,18 @@ class FirebaseConnector:
     def save_to_csv(self, participants_df: pd.DataFrame, trials_df: pd.DataFrame, 
                     output_dir: str = 'data_exports'):
         """Save dataframes to CSV for backup/external analysis"""
+
+        
         os.makedirs(output_dir, exist_ok=True)
+        participants_dir = os.path.join(output_dir, 'participants')
+        trials_dir = os.path.join(output_dir, 'trials')
+        os.makedirs(participants_dir, exist_ok=True)
+        os.makedirs(trials_dir, exist_ok=True)
+        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        participants_file = f"{output_dir}/participants_{timestamp}.csv"
-        trials_file = f"{output_dir}/trials_{timestamp}.csv"
+        participants_file = os.path.join(participants_dir, f"participants_{timestamp}.csv")
+        trials_file = os.path.join(trials_dir, f"trials_{timestamp}.csv")
         
         # For trials, convert movementPath to JSON string for CSV compatibility
         trials_export = trials_df.copy()
@@ -234,22 +241,24 @@ if __name__ == "__main__":
     try:
         connector = FirebaseConnector()
         
-        # Fetch and display summary
-        summary = connector.get_trial_summary()
+        participants_df, trials_df = connector.fetch_all_data()
+        
         print("\n" + "=" * 60)
         print("DATA SUMMARY")
         print("=" * 60)
-        print(f"Total Participants: {summary['total_participants']}")
-        print(f"Total Trials: {summary['total_trials']}")
-        print(f"\nTrials by Type:")
-        for trial_type, count in summary['trials_by_type'].items():
-            print(f"  {trial_type}: {count}")
-        print(f"\nParticipants by Gender:")
-        for gender, count in summary['participants_by_gender'].items():
-            print(f"  {gender}: {count}")
+        print(f"Total Participants: {len(participants_df)}")
+        print(f"Total Trials: {len(trials_df)}")
+        if not trials_df.empty:
+            print(f"\nTrials by Type:")
+            for trial_type, count in trials_df['trialType'].value_counts().items():
+                print(f"  {trial_type}: {count}")
+        
+        if not participants_df.empty:
+            print(f"\nParticipants by Gender:")
+            for gender, count in participants_df['gender'].value_counts().items():
+                print(f"  {gender}: {count}")
         
         # Export data
-        participants_df, trials_df = connector.fetch_all_data()
         if not participants_df.empty:
             connector.save_to_csv(participants_df, trials_df)
         
