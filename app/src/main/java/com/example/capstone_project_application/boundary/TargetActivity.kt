@@ -27,6 +27,7 @@ import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.entity.TargetTrialResult
 import kotlinx.coroutines.launch
+import androidx.lifecycle.ViewModelProvider
 
 /**
  * Main experiment activity for target-reaching trials.
@@ -56,8 +57,6 @@ class TargetActivity : AppCompatActivity() {
     private lateinit var exitButton: Button
     private lateinit var trialCounterText: TextView
 
-    private lateinit var controller: TargetController
-    private lateinit var currentTrialState: TargetTrialState
     private val movementTracker = MovementTracker()
 
     private val database by lazy { AppDatabase.getDatabase(this) }
@@ -67,10 +66,8 @@ class TargetActivity : AppCompatActivity() {
     private var toneGenerator: ToneGenerator? = null
     private val handler = Handler(Looper.getMainLooper())
 
+    private lateinit var viewModel: TargetViewModel
     private var isTrialInProgress = false
-    private var isPracticeMode = true
-    private var isTransitioning = false
-    private var practiceTrialNumber = 0
     private var trialStartTime: Long = 0
 
     private val hoveredCircles = mutableSetOf<Int>()
@@ -108,10 +105,18 @@ class TargetActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_target)
 
+        viewModel = ViewModelProvider(this)[TargetViewModel::class.java]
         initializeViews()
         initializeAudio()
         initializeInactivityHelper()
-        loadParticipantAndStartExperiment()
+
+        if (viewModel.isInitialized()) {
+            // We rotated the screen. Restore the UI immediately.
+            restoreStateAfterRotation()
+        } else {
+            // First time opening. Load from DB.
+            loadParticipantAndStartExperiment()
+        }
     }
 
     private fun initializeViews() {
@@ -154,8 +159,25 @@ class TargetActivity : AppCompatActivity() {
                 return@launch
             }
 
+            try {
+                val participantId = participant.participantId
+                val existingTrialCount = database.targetTrialDao()
+                    .getTrialCountForParticipant(participantId)
+
+                if (existingTrialCount > 0 && existingTrialCount < 15) {
+                    Log.w(TAG, "Found $existingTrialCount incomplete trials. Clearing before restart.")
+                    repository.clearIncompleteTrialData()
+                } else if (existingTrialCount >= 15) {
+                    // Participant already completed the experiment
+                    showErrorAndFinish("You have already completed the target experiment.")
+                    return@launch
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking existing trials", e)
+            }
+
             Log.d(TAG, "JND Threshold found: ${participant.jndThreshold}")
-            controller = TargetController(participant.jndThreshold!!)
+            viewModel.controller = TargetController(participant.jndThreshold!!)
             inactivityHelper.resetTimer()
             startSequence()
         }
@@ -201,6 +223,17 @@ class TargetActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         showExitConfirmationDialog()
+    }
+
+    private fun restoreStateAfterRotation() {
+        if (viewModel.isTransitioning) {
+            showTransitionScreen()
+        } else if (viewModel.currentTrialState != null) {
+            updateTrialDisplay()
+            runTrial(viewModel.currentTrialState!!)
+        } else {
+            startSequence()
+        }
     }
 
     // ===========================
@@ -318,17 +351,19 @@ class TargetActivity : AppCompatActivity() {
     // ===========================
 
     private fun startExperimentTrial() {
-        if (isTrialInProgress || isTransitioning) return
+        if (isTrialInProgress || viewModel.isTransitioning) return
 
-        currentTrialState = controller.startNewTrial()
+        val ctrl = viewModel.controller ?: return
+        val newState = ctrl.startNewTrial()
+        viewModel.currentTrialState = newState
 
-        if (currentTrialState.isExperimentFinished) {
+        if (newState.isExperimentFinished) {
             completeExperiment()
             return
         }
 
         updateTrialDisplay()
-        runTrial(currentTrialState)
+        runTrial(newState)
     }
 
     private fun initializeTrialState() {
@@ -338,15 +373,18 @@ class TargetActivity : AppCompatActivity() {
         resetCenterXPosition()
         resetAllCircleSizes()
 
-        Log.d(TAG, "Starting Trial ${currentTrialState.trialCount}: " +
-                "Type=${currentTrialState.trialType}, " +
-                "Target=${currentTrialState.targetCircleIndex}")
+        val state = viewModel.currentTrialState ?: return
+
+        Log.d(TAG, "Starting Trial ${state.trialCount}: " +
+                "Type=${state.trialType}, " +
+                "Target=${state.targetCircleIndex}")
     }
 
     private fun setupTargetBounds() {
-        if (currentTrialState.targetCircleIndex !in circles.indices) return
+        val state = viewModel.currentTrialState ?: return
+        if (state.targetCircleIndex !in circles.indices) return
 
-        val targetCircle = circles[currentTrialState.targetCircleIndex]
+        val targetCircle = circles[state.targetCircleIndex]
         targetCircle.post {
             setTargetBoundsForTracker(targetCircle)
             setAllCircleBoundsForTracker()
@@ -354,6 +392,7 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun setTargetBoundsForTracker(targetCircle: View) {
+        val state = viewModel.currentTrialState!!
         val location = IntArray(2)
         targetCircle.getLocationOnScreen(location)
 
@@ -362,10 +401,10 @@ class TargetActivity : AppCompatActivity() {
             location[1],
             location[0] + targetCircle.width,
             location[1] + targetCircle.height,
-            currentTrialState.targetCircleIndex
+            state.targetCircleIndex
         )
 
-        Log.d(TAG, "Target bounds set for circle ${currentTrialState.targetCircleIndex}")
+        Log.d(TAG, "Target bounds set for circle ${state.targetCircleIndex}")
     }
 
     private fun setAllCircleBoundsForTracker() {
@@ -421,9 +460,10 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun scheduleTargetAppearance() {
+        val state = viewModel.currentTrialState!!
         val goBeepTime = (NUM_BEEPS - 1) * BEEP_INTERVAL_MS
 
-        when (currentTrialState.trialType) {
+        when (state.trialType) {
             TrialType.PRE_JND, TrialType.PRE_SUPRA -> schedulePreTrialSequence(goBeepTime)
             TrialType.CONCURRENT_SUPRA -> scheduleConcurrentTrial(goBeepTime)
         }
@@ -438,10 +478,11 @@ class TargetActivity : AppCompatActivity() {
      * 3. Final obvious color ALWAYS follows neutral
      */
     private fun schedulePreTrialSequence(goBeepTime: Long) {
+        val state = viewModel.currentTrialState ?: return
         val hintTime = goBeepTime - HINT_OFFSET_MS
-        val targetIndex = currentTrialState.targetCircleIndex
-        val hintHue = currentTrialState.hintHue
-        val finalHue = currentTrialState.finalHue
+        val targetIndex = state.targetCircleIndex
+        val hintHue = state.hintHue
+        val finalHue = state.finalHue
 
         hintResetRunnable = Runnable {
             Log.d(TAG, "PRE sequence: Showing neutral (after hint)")
@@ -467,9 +508,10 @@ class TargetActivity : AppCompatActivity() {
      * Schedules the CONCURRENT_SUPRA trial: show obvious at GO beep only.
      */
     private fun scheduleConcurrentTrial(goBeepTime: Long) {
+        val state = viewModel.currentTrialState ?: return
         handler.postDelayed({
             Log.d(TAG, "CONCURRENT sequence: Showing obvious color")
-            showTarget(currentTrialState.targetCircleIndex, currentTrialState.finalHue)
+            showTarget(state.targetCircleIndex, state.finalHue)
         }, goBeepTime)
     }
 
@@ -488,7 +530,7 @@ class TargetActivity : AppCompatActivity() {
         hintResetRunnable?.let { handler.removeCallbacks(it) }
         finalTargetRunnable?.let { handler.removeCallbacks(it) }
 
-        if (isPracticeMode) {
+        if (viewModel.isPracticeMode) {
             Log.d(TAG, "PRACTICE TRIAL complete. Data not recorded.")
             scheduleNextTrial()
         } else {
@@ -525,16 +567,16 @@ class TargetActivity : AppCompatActivity() {
             resetCenterXPosition()
             resetAllCircleSizes()
 
-            if (isPracticeMode) {
-                if (practiceTrialNumber < PRACTICE_TRIAL_COUNT) {
+            if (viewModel.isPracticeMode) {
+                if (viewModel.practiceTrialNumber < PRACTICE_TRIAL_COUNT) {
                     startNextPracticeTrial()
                 } else {
-                    isPracticeMode = false
-                    isTransitioning = true
+                    viewModel.isPracticeMode = false
+                    viewModel.isTransitioning = true
                     showTransitionScreen()
                 }
             } else {
-                if (!isTransitioning) {
+                if (!viewModel.isTransitioning) {
                     startExperimentTrial()
                 }
             }
@@ -542,6 +584,7 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun saveTrialData(responseTime: Long) {
+        val state = viewModel.currentTrialState ?: return
         lifecycleScope.launch {
             try {
                 val participantId = repository.getCurrentParticipantId()
@@ -554,7 +597,7 @@ class TargetActivity : AppCompatActivity() {
                 val trialResult = buildTrialResult(participantId, movementData, responseTime)
 
                 database.targetTrialDao().insert(trialResult)
-                Log.d(TAG, "Trial ${currentTrialState.trialCount} data saved")
+                Log.d(TAG, "Trial ${state.trialCount} data saved")
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving trial data", e)
@@ -568,11 +611,12 @@ class TargetActivity : AppCompatActivity() {
         movementData: com.example.capstone_project_application.control.TrialMovementData,
         responseTime: Long
     ): TargetTrialResult {
+        val state = viewModel.currentTrialState!!
         return TargetTrialResult(
             participantId = participantId,
-            trialNumber = currentTrialState.trialCount,
-            trialType = currentTrialState.trialType.name,
-            targetIndex = currentTrialState.targetCircleIndex,
+            trialNumber = state.trialCount,
+            trialType = state.trialType.name,
+            targetIndex = state.targetCircleIndex,
             trialStartTimestamp = trialStartTime,
             firstMovementTimestamp = movementData.firstMovementTimestamp,
             targetReachedTimestamp = movementData.targetReachedTimestamp,
@@ -583,8 +627,8 @@ class TargetActivity : AppCompatActivity() {
             movementPath = movementData.movementPath,
             pathLength = movementData.pathLength,
             averageSpeed = movementData.averageSpeed,
-            initialHue = currentTrialState.hintHue,
-            finalHue = currentTrialState.finalHue,
+            initialHue = state.hintHue,
+            finalHue = state.finalHue,
             goBeepTimestamp = movementData.goBeepTimestamp
         )
     }
@@ -592,7 +636,7 @@ class TargetActivity : AppCompatActivity() {
     private fun runTrial(trialState: TargetTrialState) {
         if (isTrialInProgress) return
 
-        currentTrialState = trialState
+        viewModel.currentTrialState = trialState
 
         initializeTrialState()
         setupTargetBounds()
@@ -608,7 +652,7 @@ class TargetActivity : AppCompatActivity() {
     // ===========================
 
     private fun startSequence() {
-        if (isPracticeMode) {
+        if (viewModel.isPracticeMode) {
             startNextPracticeTrial()
         } else {
             startExperimentTrial()
@@ -616,10 +660,10 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun startNextPracticeTrial() {
-        practiceTrialNumber++
+        viewModel.practiceTrialNumber++
 
         val mockState = TargetTrialState(
-            trialCount = practiceTrialNumber,
+            trialCount = viewModel.practiceTrialNumber,
             totalTrials = PRACTICE_TRIAL_COUNT,
             targetCircleIndex = 0,
             trialType = TrialType.CONCURRENT_SUPRA,
@@ -669,7 +713,7 @@ class TargetActivity : AppCompatActivity() {
                     remainingSeconds--
                     handler.postDelayed(this, 1000L)
                 } else {
-                    isTransitioning = false
+                    viewModel.isTransitioning = false
                     startExperimentTrial()
                 }
             }
@@ -707,10 +751,13 @@ class TargetActivity : AppCompatActivity() {
     }
 
     private fun updateTrialDisplay() {
-        val countText = if (::currentTrialState.isInitialized) {
-            "TRIAL ${currentTrialState.trialCount} OF ${currentTrialState.totalTrials}"
+        val state = viewModel.currentTrialState
+        val ctrl = viewModel.controller
+
+        val countText = if (state != null) {
+            "TRIAL ${state.trialCount} OF ${state.totalTrials}"
         } else {
-            "TRIAL 1 OF ${controller.getTotalTrials()}"
+            "TRIAL 1 OF ${ctrl?.getTotalTrials() ?: 15}"
         }
 
         trialCounterText.text = countText
