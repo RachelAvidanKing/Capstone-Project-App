@@ -20,6 +20,8 @@ import kotlinx.coroutines.runBlocking
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.view.View
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 
 
 /**
@@ -51,7 +53,7 @@ import android.view.View
 class ThresholdActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityThresholdBinding
-    private lateinit var controller: ThresholdController
+    private lateinit var viewModel: ThresholdViewModel
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val repository by lazy { DataRepository(database, this) }
@@ -93,18 +95,19 @@ class ThresholdActivity : AppCompatActivity() {
         binding = ActivityThresholdBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        initializeController()
         initializeInactivityHelper()
         setupClickListeners()
         hideNextButton()
-        startNextTrial()
-    }
+        viewModel = ViewModelProvider(this)[ThresholdViewModel::class.java]
 
-    /**
-     * Initializes the threshold controller.
-     */
-    private fun initializeController() {
-        controller = ThresholdController()
+
+        if (viewModel.currentTrialState != null) {
+            // Restore the screen exactly as it was
+            updateUIForTrial(viewModel.currentTrialState!!)
+        } else {
+            // Start fresh only if this is truly the first load
+            startNextTrial()
+        }
     }
 
     /**
@@ -182,7 +185,7 @@ class ThresholdActivity : AppCompatActivity() {
      * Starts the next trial or completes the experiment if finished.
      */
     private fun startNextTrial() {
-        val trialState = controller.startNextTrial()
+        val trialState = viewModel.controller.startNextTrial()
 
         if (trialState.isExperimentFinished) {
             completeExperiment()
@@ -255,7 +258,7 @@ class ThresholdActivity : AppCompatActivity() {
      * @param response User's answer ("A" or "B")
      */
     private fun handleUserResponse(response: String) {
-        controller.handleUserResponse(response)
+        viewModel.controller.handleUserResponse(response)
         startNextTrial()
     }
 
@@ -269,7 +272,7 @@ class ThresholdActivity : AppCompatActivity() {
     private fun completeExperiment() {
         disablePatches()
 
-        val jndThreshold = controller.calculateJNDThreshold()
+        val jndThreshold = viewModel.controller.calculateJNDThreshold()
         Log.d(TAG, "Calculated JND Threshold: $jndThreshold")
 
         lifecycleScope.launch {
@@ -447,7 +450,7 @@ class ThresholdActivity : AppCompatActivity() {
     private suspend fun saveThresholdBeforeExit() {
         val participant = repository.getCurrentParticipant() ?: return
 
-        val jndThreshold = controller.calculateJNDThreshold()
+        val jndThreshold = viewModel.controller.calculateJNDThreshold()
         val updatedParticipant = participant.copy(jndThreshold = jndThreshold)
 
         repository.updateParticipant(updatedParticipant)
@@ -498,4 +501,13 @@ class ThresholdActivity : AppCompatActivity() {
             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
     }
+}
+
+class ThresholdViewModel : ViewModel() {
+    // This controller survives rotation because it lives in the ViewModel
+    val controller = ThresholdController()
+
+    // We cache the current state so we don't re-randomize the colors
+    // just because the screen rotated.
+    var currentTrialState: ThresholdTrialState? = null
 }
