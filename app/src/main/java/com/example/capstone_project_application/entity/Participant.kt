@@ -9,13 +9,13 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "participants")
 data class Participant(
     @PrimaryKey
-    val participantId: String, // Unique identifier (could be generated UUID)
+    val participantId: String,
     val age: Int,
-    val gender: String, // Could be enum: "Male", "Female", "Other", "Prefer not to say"
+    val gender: String,
     val hasGlasses: Boolean,
     val hasAttentionDeficit: Boolean,
     val consentGiven: Boolean,
     val registrationTimestamp: Long,
     var jndThreshold: Int? = null, // The highest hue number where participant gets 50% or less correct
-    var isUploaded: Boolean = false // ADDED: Flag to track if the participant data has been uploaded
+    var isUploaded: Boolean = false // Flag to track if the participant data has been uploaded
 )

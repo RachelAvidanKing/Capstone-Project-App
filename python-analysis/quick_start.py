@@ -206,6 +206,9 @@ def run_analysis():
         
         print("\n👥 Analyzing demographic effects...")
         analyzer.analyze_demographic_effects()
+
+        print("\n👴👵 Analyzing age group effects...")
+        analyzer.analyze_age_effects()
         
         print("\n🎯 Analyzing target effects...")
         analyzer.analyze_by_target()
@@ -231,6 +234,7 @@ def run_analysis():
         print(f"     └─ figures/")
         print(f"        ├─ demographic_comparisons/")
         print(f"        │  ├─ comparison_adhd.png")
+        print(f"        │  ├─ comparison_age_groups.png")
         print(f"        │  ├─ comparison_glasses.png")
         print(f"        │  └─ comparison_gender.png")
         print(f"        ├─ movement_paths/")

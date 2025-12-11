@@ -56,6 +56,9 @@ class SubliminalPrimingAnalyzer:
         
         # Check demographic data (already merged by Firebase connector)
         self._check_demographics()
+
+        # Add age group column
+        self._add_age_group_column()
         
         # Calculate additional metrics
         self._calculate_metrics()
@@ -436,6 +439,186 @@ class SubliminalPrimingAnalyzer:
             else:
                 self._add_report_line(f"  ✗ No significant spatial bias")
     
+    def _map_age_to_range(self, age):
+        """Map stored age values to display age ranges"""
+        age_mapping = {
+            22: '18-25',
+            30: '26-35',
+            40: '36-45',
+            53: '46-60',
+            65: '60+'
+        }
+        return age_mapping.get(age, str(age))
+
+    def _add_age_group_column(self):
+        """Add age group column to trials dataframe"""
+        if 'age' in self.trials_df.columns:
+            self.trials_df['ageGroup'] = self.trials_df['age'].apply(self._map_age_to_range)
+            self._add_report_line(f"  Age groups: {self.trials_df['ageGroup'].value_counts().to_dict()}")
+        else:
+            self._add_report_line(f"  Age data not available")
+            self.trials_df['ageGroup'] = None
+
+    def analyze_age_effects(self):
+        """Analyze how age groups affect motor planning performance"""
+        self._add_report_section("AGE GROUP EFFECTS ON MOTOR PLANNING", level=1)
+        
+        if 'ageGroup' not in self.trials_df.columns or self.trials_df['ageGroup'].isna().all():
+            self._add_report_line("⚠️ No age group data available")
+            return
+        
+        age_groups = self.trials_df['ageGroup'].dropna().unique()
+        
+        if len(age_groups) < 2:
+            self._add_report_line(f"⚠️ Only one age group found, cannot compare")
+            return
+        
+        # Sort age groups in logical order
+        age_order = ['18-25', '26-35', '36-45', '46-60', '60+']
+        age_groups = [ag for ag in age_order if ag in age_groups]
+        
+        # Create comparison plots
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle('Performance Comparison: Age Groups', fontsize=16, fontweight='bold')
+        
+        # Color palette for age groups
+        colors = plt.cm.viridis(np.linspace(0, 0.9, len(age_groups)))
+        
+        # Plot 1: Reaction Time by Trial Type and Age Group
+        ax = axes[0, 0]
+        trial_types = ['PRE_SUPRA', 'PRE_JND', 'CONCURRENT_SUPRA']
+        x_pos = np.arange(len(trial_types))
+        width = 0.8 / len(age_groups)
+        
+        for i, age_group in enumerate(age_groups):
+            subset = self.trials_df[self.trials_df['ageGroup'] == age_group]
+            rt_means = []
+            rt_sems = []
+            
+            for tt in trial_types:
+                rt_data = subset[subset['trialType'] == tt]['reactionTime'].dropna()
+                rt_means.append(rt_data.mean() if len(rt_data) > 0 else 0)
+                rt_sems.append(rt_data.sem() if len(rt_data) > 0 else 0)
+            
+            offset = (i - len(age_groups)/2 + 0.5) * width
+            ax.bar(x_pos + offset, rt_means, width, yerr=rt_sems, 
+                label=age_group, color=colors[i], capsize=5)
+        
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(['PRE\nSUPRA', 'PRE\nJND', 'CONCURRENT\nSUPRA'])
+        ax.set_ylabel('Reaction Time (ms)', fontsize=12)
+        ax.set_title('A. Reaction Time by Condition and Age', fontsize=13, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Plot 2: Path Efficiency by Trial Type and Age Group
+        ax = axes[0, 1]
+        for i, age_group in enumerate(age_groups):
+            subset = self.trials_df[self.trials_df['ageGroup'] == age_group]
+            eff_means = []
+            eff_sems = []
+            
+            for tt in trial_types:
+                eff_data = subset[subset['trialType'] == tt]['pathEfficiency'].dropna()
+                eff_means.append(eff_data.mean() if len(eff_data) > 0 else 0)
+                eff_sems.append(eff_data.sem() if len(eff_data) > 0 else 0)
+            
+            offset = (i - len(age_groups)/2 + 0.5) * width
+            ax.bar(x_pos + offset, eff_means, width, yerr=eff_sems,
+                label=age_group, color=colors[i], capsize=5)
+        
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(['PRE\nSUPRA', 'PRE\nJND', 'CONCURRENT\nSUPRA'])
+        ax.set_ylabel('Path Efficiency', fontsize=12)
+        ax.set_title('B. Path Efficiency by Condition and Age', fontsize=13, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Plot 3: Overall Reaction Time Distribution by Age
+        ax = axes[1, 0]
+        rt_by_age = []
+        labels = []
+        for age_group in age_groups:
+            subset = self.trials_df[self.trials_df['ageGroup'] == age_group]
+            rt_by_age.append(subset['reactionTime'].dropna())
+            labels.append(age_group)
+        
+        bp = ax.boxplot(rt_by_age, labels=labels, patch_artist=True)
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+        ax.set_xlabel('Age Group', fontsize=12)
+        ax.set_ylabel('Reaction Time (ms)', fontsize=12)
+        ax.set_title('C. Reaction Time Distribution by Age', fontsize=13, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Plot 4: Overall Path Efficiency Distribution by Age
+        ax = axes[1, 1]
+        eff_by_age = []
+        for age_group in age_groups:
+            subset = self.trials_df[self.trials_df['ageGroup'] == age_group]
+            eff_by_age.append(subset['pathEfficiency'].dropna())
+        
+        bp = ax.boxplot(eff_by_age, labels=labels, patch_artist=True)
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+        ax.set_xlabel('Age Group', fontsize=12)
+        ax.set_ylabel('Path Efficiency', fontsize=12)
+        ax.set_title('D. Path Efficiency Distribution by Age', fontsize=13, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        plt.tight_layout()
+        filename = os.path.join(self.demographic_dir, 'comparison_age_groups.png')
+        plt.savefig(filename, dpi=300)
+        self._add_report_line(f"  → Saved: {filename}")
+        plt.close()
+        
+        # Statistical comparison in report
+        self._add_report_line(f"\nStatistical Comparison by Age Group:")
+        
+        for age_group in age_groups:
+            subset = self.trials_df[self.trials_df['ageGroup'] == age_group]
+            self._add_report_line(f"\n{age_group} years (n={len(subset)} trials):")
+            
+            for tt in trial_types:
+                tt_data = subset[subset['trialType'] == tt]
+                if len(tt_data) > 0:
+                    rt_mean = tt_data['reactionTime'].mean()
+                    rt_std = tt_data['reactionTime'].std()
+                    eff_mean = tt_data['pathEfficiency'].mean()
+                    
+                    self._add_report_line(f"  {tt}:")
+                    self._add_report_line(f"    Reaction Time: {rt_mean:.1f} ms (SD={rt_std:.1f})")
+                    self._add_report_line(f"    Path Efficiency: {eff_mean:.3f}")
+        
+        # ANOVA test across all age groups
+        if len(age_groups) >= 2:
+            rt_groups = [self.trials_df[self.trials_df['ageGroup'] == ag]['reactionTime'].dropna() 
+                        for ag in age_groups]
+            
+            # Filter out empty groups
+            rt_groups = [g for g in rt_groups if len(g) > 0]
+            
+            if len(rt_groups) >= 2:
+                f_stat, p_val = stats.f_oneway(*rt_groups)
+                self._add_report_line(f"\nAge Effect on Reaction Time (ANOVA):")
+                self._add_report_line(f"  F={f_stat:.3f}, p={p_val:.4f}")
+                if p_val < 0.05:
+                    self._add_report_line(f"  ✓ SIGNIFICANT age effect detected!")
+                    
+                    # Find which age groups differ most
+                    means = [(ag, self.trials_df[self.trials_df['ageGroup'] == ag]['reactionTime'].mean()) 
+                            for ag in age_groups]
+                    means.sort(key=lambda x: x[1])
+                    fastest = means[0]
+                    slowest = means[-1]
+                    diff = slowest[1] - fastest[1]
+                    self._add_report_line(f"  Fastest: {fastest[0]} ({fastest[1]:.1f} ms)")
+                    self._add_report_line(f"  Slowest: {slowest[0]} ({slowest[1]:.1f} ms)")
+                    self._add_report_line(f"  Difference: {diff:.1f} ms")
+                else:
+                    self._add_report_line(f"  ✗ No significant age effect")
+
+
     def analyze_velocity_profiles(self, sample_size=5):
         """Analyze velocity profiles INCLUDING reaction time"""
         self._add_report_section("VELOCITY PROFILE ANALYSIS", level=1)
@@ -631,8 +814,11 @@ def main():
     analyzer._add_report_section("MAIN HYPOTHESIS TESTING - ALL DATA", level=1)
     analyzer.test_main_hypothesis()
     
-    # DEMOGRAPHIC COMPARISONS - This is the main new feature!
+    # DEMOGRAPHIC COMPARISONS
     analyzer.analyze_demographic_effects()
+
+    # AGE GROUP ANALYSIS
+    analyzer.analyze_age_effects()
     
     # Target-specific analysis
     analyzer.analyze_by_target()
