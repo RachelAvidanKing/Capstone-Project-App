@@ -49,3 +49,13 @@ python-analysis/.ipynb_checkpoints/
 .venv/
 venv/
 analysis_outputs
+
+
+# =========================================================
+# React / Node
+# =========================================================
+
+node_modules/
+build/
+.eslintcache
+.DS_Store
