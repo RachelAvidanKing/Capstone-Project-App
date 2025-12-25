@@ -65,7 +65,7 @@ class CapstoneApplication : Application() {
     }
 
     /**
-     * his function schedules DataUploadWorker to run periodically
+     * This function schedules DataUploadWorker to run periodically
      * in the background, even if the app is closed.
      */
     private fun setupPeriodicUploadWorker() {

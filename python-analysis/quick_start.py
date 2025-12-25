@@ -1,7 +1,9 @@
 """
-Quick Start Script
-This is the easiest way to get started with analysis
-Just run: python quick_start.py
+Enhanced Quick Start Script
+Includes new features:
+1. Detailed single participant analysis with paired t-tests
+2. Plot all velocities with time caps and averages
+3. Prepared for GUI transition (modular structure)
 """
 
 import os
@@ -11,7 +13,7 @@ from datetime import datetime
 # Default credentials file
 DEFAULT_CREDENTIALS_FILENAME = 'serviceAccountKey.json'
 
-# Cache for data to avoid re-downloading
+# Cache for data
 _data_cache = {
     'participants': None,
     'trials': None,
@@ -63,7 +65,6 @@ def load_data_with_cache(force_reload=False):
         
         participants_df, trials_df = load_data(DEFAULT_CREDENTIALS_FILENAME)
         
-        # Update cache
         _data_cache['participants'] = participants_df
         _data_cache['trials'] = trials_df
         _data_cache['last_loaded'] = datetime.now()
@@ -79,10 +80,9 @@ def load_data_with_cache(force_reload=False):
 def print_menu():
     """Display menu options"""
     print("\n" + "="*70)
-    print("REACHING MOVEMENT ANALYSIS - QUICK START")
+    print("REACHING MOVEMENT ANALYSIS - ENHANCED VERSION")
     print("="*70)
     
-    # Show cache status
     if _data_cache['last_loaded']:
         cache_time = _data_cache['last_loaded'].strftime('%H:%M:%S')
         p_count = len(_data_cache['participants']) if _data_cache['participants'] is not None else 0
@@ -94,10 +94,11 @@ def print_menu():
     print("2. View data summary")
     print("3. Run full analysis (generates all plots and reports)")
     print("4. Export data to CSV")
-    print("5. Analyze specific participant")
-    print("6. Clean old analysis outputs")
-    print("7. Help - Learn about Jupyter notebooks")
-    print("8. Reload data from Firebase (refresh cache)")
+    print("5. Analyze specific participant (DETAILED - NEW!)")
+    print("6. Plot all velocities with time cap (NEW!)")
+    print("7. Clean old analysis outputs")
+    print("8. Help - Learn about Jupyter notebooks")
+    print("9. Reload data from Firebase (refresh cache)")
     print("0. Exit")
     print("\n" + "="*70)
 
@@ -118,24 +119,15 @@ def test_connection():
             for trial_type, count in summary['trials_by_type'].items():
                 print(f"    - {trial_type}: {count}")
         
-        if summary['total_participants'] > 0 and 'participants_by_gender' in summary:
-            print(f"  Gender distribution: {summary['participants_by_gender']}")
-        
         return True
     except Exception as e:
         print(f"\n❌ Connection failed: {e}")
-        print("\nTroubleshooting:")
-        print(f"  1. Check that '{DEFAULT_CREDENTIALS_FILENAME}' exists in this folder")
-        print("  2. Verify you have internet connection")
-        print("  3. Ensure Firebase credentials are valid")
         return False
 
 def view_summary():
     """Display quick data summary"""
     print("\n📊 Loading data...")
     try:
-        import pandas as pd
-        
         participants_df, trials_df = load_data_with_cache()
         
         print("\n" + "="*70)
@@ -153,7 +145,7 @@ def view_summary():
             if 'hasGlasses' in participants_df.columns:
                 print(f"   With glasses: {participants_df['hasGlasses'].sum()}")
             if 'hasAttentionDeficit' in participants_df.columns:
-                print(f"   With attention deficit: {participants_df['hasAttentionDeficit'].sum()}")
+                print(f"   With ADHD: {participants_df['hasAttentionDeficit'].sum()}")
         
         print(f"\n📊 TRIALS: {len(trials_df)}")
         if not trials_df.empty:
@@ -164,18 +156,10 @@ def view_summary():
                 rt_data = trials_df['reactionTime'].dropna()
                 if len(rt_data) > 0:
                     print(f"   - Avg reaction time: {rt_data.mean():.1f} ms")
-            if 'movementTime' in trials_df.columns:
-                mt_data = trials_df['movementTime'].dropna()
-                if len(mt_data) > 0:
-                    print(f"   - Avg movement time: {mt_data.mean():.1f} ms")
-            if 'pathLength' in trials_df.columns:
-                pl_data = trials_df['pathLength'].dropna()
-                if len(pl_data) > 0:
-                    print(f"   - Avg path length: {pl_data.mean():.1f} pixels")
         
         return True
     except Exception as e:
-        print(f"\n❌ Error loading data: {e}")
+        print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -183,41 +167,43 @@ def view_summary():
 def run_analysis():
     """Run full analysis"""
     print("\n🔬 Running complete analysis...")
-    print("This may take a minute...")
     
     try:
         from subliminal_priming_analyzer import SubliminalPrimingAnalyzer
         
-        # Load data (using cache if available)
         participants_df, trials_df = load_data_with_cache()
         
         if trials_df.empty:
-            print("\n⚠️  No trial data found. Cannot run analysis.")
+            print("\n⚠️  No trial data found.")
             return False
         
-        print(f"✓ Using {len(participants_df)} participants, {len(trials_df)} trials")
-        
-        # Create analyzer - NOTE: Order changed to match new constructor
         analyzer = SubliminalPrimingAnalyzer(trials_df, participants_df)
         
-        # Run all analyses
         print("\n📊 Running main hypothesis tests...")
         analyzer.test_main_hypothesis()
         
         print("\n👥 Analyzing demographic effects...")
-        analyzer.analyze_demographic_effects()
-
-        print("\n👴👵 Analyzing age group effects...")
-        analyzer.analyze_age_effects()
-        
-        print("\n🎯 Analyzing target effects...")
-        analyzer.analyze_by_target()
+        analyzer.run_all_demographics()
         
         print("\n📈 Generating velocity profiles...")
-        analyzer.analyze_velocity_profiles()
+        analyzer.plot_velocity_profiles()
         
-        print("\n🗺️  Plotting movement paths...")
-        analyzer.plot_movement_paths()
+        print("\nWould you like velocity profiles split by a demographic?")
+        print("  1. ADHD")
+        print("  2. Glasses")
+        print("  3. Gender")
+        print("  0. Skip")
+        
+        choice = input("\nYour choice: ").strip()
+        
+        split_col = {
+            '1': 'hasAttentionDeficit',
+            '2': 'hasGlasses',
+            '3': 'gender'
+        }.get(choice)
+        
+        if split_col:
+            analyzer.plot_velocity_profiles(split_by_col=split_col)
         
         print("\n📊 Creating summary plots...")
         analyzer.create_summary_plots()
@@ -228,20 +214,7 @@ def run_analysis():
         print("\n" + "="*70)
         print("✅ ANALYSIS COMPLETE!")
         print("="*70)
-        print(f"\nResults saved in:")
-        print(f"  📁 {analyzer.output_dir}/")
-        print(f"     ├─ subliminal_priming_report.txt")
-        print(f"     └─ figures/")
-        print(f"        ├─ demographic_comparisons/")
-        print(f"        │  ├─ comparison_adhd.png")
-        print(f"        │  ├─ comparison_age_groups.png")
-        print(f"        │  ├─ comparison_glasses.png")
-        print(f"        │  └─ comparison_gender.png")
-        print(f"        ├─ movement_paths/")
-        print(f"        │  └─ paths_by_trial_type.png")
-        print(f"        ├─ summary_comparison_overall.png")
-        print(f"        ├─ target_comparison.png")
-        print(f"        └─ velocity_profiles.png")
+        print(f"\n📁 Results saved in: {analyzer.output_dir}/")
         
         return True
     except Exception as e:
@@ -267,31 +240,27 @@ def export_data():
         files = connector.save_to_csv(participants_df, trials_df)
         
         print("\n✅ Data exported successfully!")
-        print("\nFiles created:")
-        print(f"  📄 {files[0]}")
-        print(f"  📄 {files[1]}")
-        print("\nYou can now open these files in Excel, SPSS, or any spreadsheet software.")
         
         return True
     except Exception as e:
         print(f"\n❌ Export failed: {e}")
-        import traceback
-        traceback.print_exc()
         return False
 
-def analyze_participant():
-    """Analyze specific participant"""
-    print("\n👤 Loading participants...")
+def analyze_participant_detailed():
+    """NEW: Detailed analysis of specific participant with paired t-tests"""
+    print("\n👤 DETAILED PARTICIPANT ANALYSIS")
+    print("="*70)
     
     try:
-        # Use cached data
+        from single_participant_analyzer import SingleParticipantAnalyzer
+        
         participants_df, trials_df = load_data_with_cache()
         
         if participants_df.empty:
             print("\n⚠️  No participants found")
             return False
         
-        # Show all participants with pagination
+        # Show participants
         print(f"\nTotal participants: {len(participants_df)}")
         print("\nAvailable participants:")
         
@@ -303,100 +272,116 @@ def analyze_participant():
             print(f"  {idx}. {pid} ({p_trials} trials, Age: {age}, Gender: {gender})")
         
         print("\n" + "-"*70)
-        choice = input(f"\nEnter participant number (1-{len(participants_df)}) or full ID: ").strip()
+        choice = input(f"\nEnter participant number (1-{len(participants_df)}) or ID: ").strip()
         
         # Determine participant_id
-        participant_id = None
-        
-        # Check if input matches a participant ID directly first (before trying as number)
         if choice in participants_df['participantId'].values:
             participant_id = choice
-            print(f"Selected by ID: {participant_id}")
         else:
-            # Try as number
             try:
                 idx = int(choice)
                 if 1 <= idx <= len(participants_df):
                     participant_id = participants_df.iloc[idx - 1]['participantId']
-                    print(f"Selected by number: {participant_id}")
                 else:
-                    print(f"❌ Number out of range. Please enter 1-{len(participants_df)}")
+                    print(f"❌ Number out of range")
                     return False
             except ValueError:
-                # Not a number and not a valid ID
-                print(f"❌ Invalid input: '{choice}'")
-                print(f"\nPlease enter either:")
-                print(f"  - A number from 1 to {len(participants_df)}")
-                print(f"  - A valid participant ID from the list above")
+                print(f"❌ Invalid input")
                 return False
         
         # Get participant data
-        p_data = participants_df[participants_df['participantId'] == participant_id]
-        if p_data.empty:
-            print(f"\n❌ Participant {participant_id} not found")
-            return False
-        
+        p_info = participants_df[participants_df['participantId'] == participant_id].iloc[0]
         p_trials = trials_df[trials_df['participantId'] == participant_id]
         
-        print(f"\n" + "="*70)
-        print(f"PARTICIPANT: {participant_id}")
-        print("="*70)
+        if p_trials.empty:
+            print(f"\n❌ No trials found for participant {participant_id}")
+            return False
         
-        p_info = p_data.iloc[0]
-        print(f"\nDemographics:")
-        print(f"  Age: {p_info.get('age', 'N/A')}")
-        print(f"  Gender: {p_info.get('gender', 'N/A')}")
-        print(f"  Glasses: {p_info.get('hasGlasses', 'N/A')}")
-        print(f"  Attention deficit: {p_info.get('hasAttentionDeficit', 'N/A')}")
-        if p_info.get('jndThreshold'):
-            print(f"  JND threshold: {p_info['jndThreshold']}")
+        # Run detailed analysis
+        print(f"\n{'='*70}")
+        print(f"Running detailed analysis for: {participant_id}")
+        print(f"{'='*70}\n")
         
-        print(f"\nPerformance:")
-        print(f"  Total trials: {len(p_trials)}")
-        if not p_trials.empty:
-            if 'trialType' in p_trials.columns:
-                print(f"  Trial types: {p_trials['trialType'].value_counts().to_dict()}")
-            if 'reactionTime' in p_trials.columns:
-                rt_data = p_trials['reactionTime'].dropna()
-                if len(rt_data) > 0:
-                    print(f"  Avg reaction time: {rt_data.mean():.1f} ms")
-            if 'movementTime' in p_trials.columns:
-                mt_data = p_trials['movementTime'].dropna()
-                if len(mt_data) > 0:
-                    print(f"  Avg movement time: {mt_data.mean():.1f} ms")
+        analyzer = SingleParticipantAnalyzer(participant_id, p_trials, p_info)
+        analyzer.run_full_analysis()
         
-        # Create organized directory structure
-        base_dir = 'data_exports/participant_reports'
-        participant_dir = os.path.join(base_dir, participant_id)
-        os.makedirs(participant_dir, exist_ok=True)
+        return True
         
-        # Save participant report
-        report_file = os.path.join(participant_dir, f'{participant_id}_report.txt')
-        with open(report_file, 'w') as f:
-            f.write(f"Participant Report: {participant_id}\n")
-            f.write(f"Generated: {datetime.now()}\n\n")
-            f.write(f"Demographics:\n")
-            f.write(f"  Age: {p_info.get('age', 'N/A')}\n")
-            f.write(f"  Gender: {p_info.get('gender', 'N/A')}\n")
-            f.write(f"  Glasses: {p_info.get('hasGlasses', 'N/A')}\n")
-            f.write(f"  Attention deficit: {p_info.get('hasAttentionDeficit', 'N/A')}\n\n")
-            f.write(f"Trial Summary:\n")
-            if not p_trials.empty:
-                cols_to_export = ['trialNumber', 'trialType', 'reactionTime', 'movementTime']
-                available_cols = [col for col in cols_to_export if col in p_trials.columns]
-                if available_cols:
-                    f.write(p_trials[available_cols].to_string())
-                else:
-                    f.write("No trial data available\n")
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def plot_all_velocities():
+    """NEW: Plot all velocity profiles with time cap"""
+    print("\n📈 PLOT ALL VELOCITIES")
+    print("="*70)
+    
+    try:
+        from velocity_plotter import VelocityPlotter
         
-        print(f"\n✅ Report saved to: {report_file}")
+        participants_df, trials_df = load_data_with_cache()
         
-        # Export trials to CSV
-        csv_file = os.path.join(participant_dir, f'{participant_id}_trials.csv')
-        p_trials.to_csv(csv_file, index=False)
-        print(f"✅ Trials exported to: {csv_file}")
+        if trials_df.empty:
+            print("\n⚠️  No trial data found")
+            return False
         
-        print(f"\n📁 All files saved in: {participant_dir}")
+        # Get time cap
+        print("\nSet time cap (milliseconds) to prevent time outliers:")
+        print("  Recommended: 10000 ms (10 seconds)")
+        print("  Default: 10000 ms")
+        
+        time_cap_input = input("\nEnter time cap in ms (press Enter for 10000): ").strip()
+        
+        try:
+            time_cap = int(time_cap_input) if time_cap_input else 10000
+        except ValueError:
+            print("Invalid input, using default 10000 ms")
+            time_cap = 10000
+        
+        # Get velocity cap
+        print("\nSet velocity cap (pixels/second) to prevent velocity outliers:")
+        print("  Recommended: 5000 px/s")
+        print("  Default: 5000 px/s")
+        
+        vel_cap_input = input("\nEnter velocity cap in px/s (press Enter for 5000): ").strip()
+        
+        try:
+            vel_cap = int(vel_cap_input) if vel_cap_input else 5000
+        except ValueError:
+            print("Invalid input, using default 5000 px/s")
+            vel_cap = 5000
+        
+        # Ask about splitting
+        print("\nWould you like to split by demographic?")
+        print("  1. ADHD")
+        print("  2. Glasses")
+        print("  3. Gender")
+        print("  0. No split (show all together)")
+        
+        choice = input("\nYour choice: ").strip()
+        
+        split_col = {
+            '1': 'hasAttentionDeficit',
+            '2': 'hasGlasses',
+            '3': 'gender',
+            '0': None
+        }.get(choice, None)
+        
+        # Create plotter and generate plots
+        plotter = VelocityPlotter(trials_df)
+        plotter.plot_all_velocities(time_cap_ms=time_cap, velocity_cap_px_s=vel_cap, 
+                                    split_by_col=split_col)
+        
+        # Also create comparison matrix
+        print("\nWould you like a comprehensive comparison matrix? (yes/no): ")
+        if input().strip().lower() == 'yes':
+            plotter.create_velocity_comparison_matrix(time_cap_ms=time_cap, 
+                                                     velocity_cap=vel_cap)
+        
+        print("\n✅ Velocity plots complete!")
+        print(f"📁 Saved to: {plotter.output_dir}/")
         
         return True
         
@@ -407,7 +392,7 @@ def analyze_participant():
         return False
 
 def clean_old_outputs():
-    """Clean old analysis outputs to free up space"""
+    """Clean old analysis outputs"""
     print("\n🧹 Cleaning old analysis outputs...")
     
     try:
@@ -417,7 +402,6 @@ def clean_old_outputs():
             print("No analysis_outputs folder found - nothing to clean!")
             return True
         
-        # List all runs
         runs = [d for d in os.listdir('analysis_outputs') 
                 if os.path.isdir(os.path.join('analysis_outputs', d)) and d.startswith('run_')]
         
@@ -425,16 +409,9 @@ def clean_old_outputs():
             print("No analysis runs found!")
             return True
         
-        runs.sort(reverse=True)  # Most recent first
+        runs.sort(reverse=True)
         
-        print(f"\nFound {len(runs)} analysis runs:")
-        for idx, run in enumerate(runs[:10], 1):
-            size = get_folder_size(os.path.join('analysis_outputs', run))
-            print(f"  {idx}. {run} ({size:.1f} MB)")
-        
-        if len(runs) > 10:
-            print(f"  ... and {len(runs) - 10} more")
-        
+        print(f"\nFound {len(runs)} analysis runs")
         print("\nOptions:")
         print("  1. Keep only the most recent run")
         print("  2. Keep the 3 most recent runs")
@@ -463,15 +440,12 @@ def clean_old_outputs():
         confirm = input(f"\n⚠️  Delete {len(to_delete)} runs? (yes/no): ").strip().lower()
         
         if confirm == 'yes':
-            total_freed = 0
             for run in to_delete:
                 run_path = os.path.join('analysis_outputs', run)
-                size = get_folder_size(run_path)
                 shutil.rmtree(run_path)
-                total_freed += size
                 print(f"  ✓ Deleted {run}")
             
-            print(f"\n✅ Freed {total_freed:.1f} MB of space")
+            print(f"\n✅ Deleted {len(to_delete)} runs")
             return True
         else:
             print("Cancelled")
@@ -479,19 +453,7 @@ def clean_old_outputs():
             
     except Exception as e:
         print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
         return False
-
-def get_folder_size(folder_path):
-    """Get folder size in MB"""
-    total_size = 0
-    for dirpath, dirnames, filenames in os.walk(folder_path):
-        for filename in filenames:
-            filepath = os.path.join(dirpath, filename)
-            if os.path.exists(filepath):
-                total_size += os.path.getsize(filepath)
-    return total_size / (1024 * 1024)  # Convert to MB
 
 def show_jupyter_help():
     """Show help about Jupyter notebooks"""
@@ -506,53 +468,23 @@ Jupyter Notebook is an interactive coding environment where you can:
   • Mix code, explanations, and visualizations
   • Experiment with data analysis step-by-step
 
-WHY USE IT?
-  • Great for exploring data interactively
-  • You can modify code and re-run without starting over
-  • Perfect for learning and experimentation
-
 HOW TO GET STARTED:
 
-1. Install Jupyter (if you haven't already):
+1. Install Jupyter:
    pip install jupyter
 
 2. Start Jupyter in this folder:
    jupyter notebook
 
-3. This will open in your web browser automatically
+3. This will open in your web browser
 
-4. Create a new notebook (click "New" → "Python 3")
-
-5. Try this simple example in the first cell:
+4. Create a new notebook and try:
 
    from firebase_connector import load_data
+   from single_participant_analyzer import SingleParticipantAnalyzer
+   
    participants, trials = load_data('serviceAccountKey.json')
    print(f"Loaded {len(participants)} participants")
-   
-6. Press Shift+Enter to run the cell
-
-7. Create more cells to explore your data:
-
-   # See trial types
-   trials['trialType'].value_counts()
-   
-   # Plot reaction times
-   import matplotlib.pyplot as plt
-   trials['reactionTime'].hist()
-   plt.show()
-
-TIPS:
-  • Press Shift+Enter to run a cell
-  • Press ESC then A to add a cell above
-  • Press ESC then B to add a cell below
-  • Save often with Ctrl+S
-
-LEARNING RESOURCES:
-  • https://jupyter.org/try
-  • Built-in help: Press H in Jupyter for keyboard shortcuts
-
-If you're happy with the automated analysis (option 3), you don't need
-Jupyter at all! It's just an alternative way to explore data.
 """)
     
     choice = input("\nWould you like to start Jupyter now? (yes/no): ").strip().lower()
@@ -561,14 +493,9 @@ Jupyter at all! It's just an alternative way to explore data.
         try:
             import subprocess
             print("\n🚀 Starting Jupyter Notebook...")
-            print("A browser window will open shortly.")
-            print("Press Ctrl+C in this terminal to stop Jupyter when done.\n")
             subprocess.run(['jupyter', 'notebook'])
-        except FileNotFoundError:
-            print("\n❌ Jupyter not installed!")
-            print("Install it with: pip install jupyter")
-        except Exception as e:
-            print(f"\n❌ Error starting Jupyter: {e}")
+        except:
+            print("\n❌ Jupyter not installed! Install with: pip install jupyter")
 
 def reload_data():
     """Force reload data from Firebase"""
@@ -579,14 +506,12 @@ def reload_data():
         return True
     except Exception as e:
         print(f"\n❌ Reload failed: {e}")
-        import traceback
-        traceback.print_exc()
         return False
 
 def main():
     """Main program loop"""
     print("\n" + "="*70)
-    print("REACHING MOVEMENT ANALYSIS TOOL")
+    print("REACHING MOVEMENT ANALYSIS TOOL - ENHANCED")
     print("="*70)
     
     # Check requirements
@@ -603,7 +528,7 @@ def main():
     while True:
         print_menu()
         
-        choice = input("\nEnter your choice (0-8): ").strip()
+        choice = input("\nEnter your choice (0-9): ").strip()
         
         if choice == '0':
             print("\n👋 Goodbye!")
@@ -617,12 +542,14 @@ def main():
         elif choice == '4':
             export_data()
         elif choice == '5':
-            analyze_participant()
+            analyze_participant_detailed()
         elif choice == '6':
-            clean_old_outputs()
+            plot_all_velocities()
         elif choice == '7':
-            show_jupyter_help()
+            clean_old_outputs()
         elif choice == '8':
+            show_jupyter_help()
+        elif choice == '9':
             reload_data()
         else:
             print("\n❌ Invalid choice. Please try again.")
