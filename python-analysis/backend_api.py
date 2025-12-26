@@ -159,32 +159,65 @@ def reload_data():
 def export_raw_data():
     """Export raw data from Firebase (before any processing)"""
     try:
+        data_type = request.args.get('type', 'both')  # 'participants', 'trials', or 'both'
         participants_df, trials_df = load_data()
         
-        # Create CSV files
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Prepare trials for export (convert movementPath to JSON string)
-        trials_export = trials_df.copy()
-        if 'movementPath' in trials_export.columns:
-            trials_export['movementPath'] = trials_export['movementPath'].apply(
-                lambda x: json.dumps(x) if isinstance(x, list) else x
+        if data_type == 'participants':
+            # Export only participants as CSV
+            output = io.StringIO()
+            participants_df.to_csv(output, index=False)
+            output.seek(0)
+            
+            return send_file(
+                io.BytesIO(output.getvalue().encode()),
+                mimetype='text/csv',
+                as_attachment=True,
+                download_name=f'raw_participants_{timestamp}.csv'
             )
         
-        # Create CSV in memory
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            participants_df.to_excel(writer, sheet_name='Participants', index=False)
-            trials_export.to_excel(writer, sheet_name='Trials', index=False)
+        elif data_type == 'trials':
+            # Export only trials as Excel
+            trials_export = trials_df.copy()
+            if 'movementPath' in trials_export.columns:
+                trials_export['movementPath'] = trials_export['movementPath'].apply(
+                    lambda x: json.dumps(x) if isinstance(x, list) else x
+                )
+            
+            output = io.BytesIO()
+            trials_export.to_excel(output, engine='openpyxl', index=False)
+            output.seek(0)
+            
+            return send_file(
+                output,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'raw_trials_{timestamp}.xlsx'
+            )
         
-        output.seek(0)
-        
-        return send_file(
-            output,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=f'raw_data_{timestamp}.xlsx'
-        )
+        else:  # 'both' - default legacy behavior
+            # Prepare trials for export (convert movementPath to JSON string)
+            trials_export = trials_df.copy()
+            if 'movementPath' in trials_export.columns:
+                trials_export['movementPath'] = trials_export['movementPath'].apply(
+                    lambda x: json.dumps(x) if isinstance(x, list) else x
+                )
+            
+            # Create Excel with both sheets
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                participants_df.to_excel(writer, sheet_name='Participants', index=False)
+                trials_export.to_excel(writer, sheet_name='Trials', index=False)
+            
+            output.seek(0)
+            
+            return send_file(
+                output,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'raw_data_{timestamp}.xlsx'
+            )
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
