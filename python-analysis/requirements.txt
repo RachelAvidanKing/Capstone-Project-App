@@ -1,7 +1,7 @@
 # Core Firebase
 firebase-admin==6.5.0
 
-# Data manipulation (Python 3.13 compatible versions)
+# Data manipulation
 pandas>=2.2.0
 numpy>=1.26.0
 
@@ -14,14 +14,16 @@ plotly>=5.18.0
 scipy>=1.13.0
 statsmodels>=0.14.0
 
-# For API
-flask>=3.0.0
-flask-cors>=4.0.0
+# API & Backend
+flask>=3.1.2
+flask-cors>=5.0.0
+# Recommended for production-ready API servers
+gunicorn>=21.2.0  
 
-# Jupyter for interactive analysis (optional but recommended)
-jupyter>=1.0.0
-notebook>=7.0.0
-
-# Excel export
+# Excel & Exporting
 openpyxl>=3.1.2
 xlsxwriter>=3.1.0
+
+# Optional: Interactive Analysis
+jupyter>=1.0.0
+notebook>=7.0.0
