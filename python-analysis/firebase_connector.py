@@ -14,7 +14,9 @@ from datetime import datetime
 class FirebaseConnector:
     """Manages connection to Firebase and data retrieval"""
     
-    DEFAULT_CREDENTIALS_FILENAME = 'serviceAccountKey.json'
+    # Default credentials file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    DEFAULT_CREDENTIALS_FILENAME = os.path.join(script_dir, 'serviceAccountKey.json')
 
     def __init__(self, credentials_path=None):
         """
@@ -153,7 +155,7 @@ class FirebaseConnector:
         return participants_df, trials_df
     
     def save_to_csv(self, participants_df: pd.DataFrame, trials_df: pd.DataFrame, 
-                    output_dir: str = 'data_exports'):
+                    output_dir: str = 'python-analysis/data_exports'):
         """Save dataframes to CSV for backup/external analysis"""
 
         

@@ -3,6 +3,7 @@ Flask Backend API for Behavioral Analysis Toolkit
 Handles Firebase connections, data processing, and analysis
 """
 
+import tempfile
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 import pandas as pd
@@ -19,13 +20,17 @@ import os
 from datetime import datetime
 from typing import Dict, List, Tuple
 
-# Import your existing modules
+# Import existing modules
 from firebase_connector import FirebaseConnector
 from subliminal_priming_analyzer import SubliminalPrimingAnalyzer
 from velocity_plotter import VelocityPlotter
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
+
+# Default credentials file
+script_dir = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CREDENTIALS_FILENAME = os.path.join(script_dir, 'serviceAccountKey.json')
 
 # Global data cache
 _cache = {
@@ -42,7 +47,7 @@ _cache = {
 def init_firebase():
     """Initialize Firebase connection if not already done"""
     if _cache['connector'] is None:
-        _cache['connector'] = FirebaseConnector('serviceAccountKey.json')
+        _cache['connector'] = FirebaseConnector(DEFAULT_CREDENTIALS_FILENAME)
 
 def load_data(force_reload=False):
     """Load data from Firebase or cache"""
@@ -119,6 +124,9 @@ def get_status():
         init_firebase()
         participants_df, trials_df = load_data()
         
+        # Get gender breakdown
+        gender_counts = participants_df['gender'].value_counts().to_dict() if 'gender' in participants_df.columns else {}
+        
         return jsonify({
             'status': 'success',
             'connected': True,
@@ -128,7 +136,9 @@ def get_status():
             'demographics': {
                 'with_adhd': int(participants_df['hasAttentionDeficit'].sum()) if 'hasAttentionDeficit' in participants_df.columns else 0,
                 'with_glasses': int(participants_df['hasGlasses'].sum()) if 'hasGlasses' in participants_df.columns else 0,
-                'gender_distribution': participants_df['gender'].value_counts().to_dict() if 'gender' in participants_df.columns else {}
+                'gender_distribution': gender_counts,
+                'male_count': gender_counts.get('Male', 0),
+                'female_count': gender_counts.get('Female', 0)
             }
         })
     except Exception as e:
@@ -290,13 +300,62 @@ def run_full_analysis():
         
         # Get report text
         report_text = '\n'.join(analyzer.report_lines)
+        analyzer.save_report()
         
         return jsonify({
             'status': 'success',
             'plots': plots,
             'report': report_text,
-            'output_dir': analyzer.output_dir
+            'output_dir': analyzer.output_dir  # Frontend can use this to construct download URL
         })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/analysis/download', methods=['POST'])
+def download_analysis_package():
+    """Download all analysis results as a zip file"""
+    try:
+        data = request.json
+        # The analyzer provides this path during the /api/analysis/full call
+        output_dir = data.get('output_dir') 
+        
+        if not output_dir:
+            return jsonify({'status': 'error', 'message': 'No directory provided'}), 400
+
+        # Convert to absolute path so Python knows exactly where to look
+        abs_output_dir = os.path.abspath(output_dir)
+        
+        if not os.path.exists(abs_output_dir):
+            return jsonify({'status': 'error', 'message': f'Path not found: {abs_output_dir}'}), 404
+        
+        # Create zip file
+        import zipfile
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_dir = tempfile.gettempdir()
+        zip_filename = f'analysis_results_{timestamp}.zip'
+        zip_path = os.path.join(temp_dir, zip_filename)
+
+        # Build the ZIP
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            file_count = 0
+            for root, dirs, files in os.walk(abs_output_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # This ensures the ZIP doesn't contain your whole C:\Users\ path
+                    arcname = os.path.relpath(file_path, abs_output_dir)
+                    zipf.write(file_path, arcname)
+                    file_count += 1
+        
+        if file_count == 0:
+            return jsonify({'status': 'error', 'message': 'Target directory was empty'}), 400
+        
+        return send_file(
+            zip_path,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=zip_filename
+        )
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -309,10 +368,16 @@ def create_velocity_plots():
         time_cap = data.get('time_cap', 10000)
         velocity_cap = data.get('velocity_cap', 5000)
         split_by = data.get('split_by', None)
+        include_matrix = data.get('include_matrix', False)
         
         participants_df, trials_df = load_data()
         
-        plotter = VelocityPlotter(trials_df)
+        # Create a unique output directory for this request
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = f'python-analysis/analysis_outputs/velocity_{timestamp}'
+        os.makedirs(output_dir, exist_ok=True)
+        
+        plotter = VelocityPlotter(trials_df, output_dir=output_dir)
         
         # Generate unified plot
         plotter.plot_all_velocities(
@@ -321,11 +386,18 @@ def create_velocity_plots():
             split_by_col=split_by
         )
         
-        # Find generated files
+        # Generate matrix if requested
+        if include_matrix:
+            plotter.create_velocity_comparison_matrix(
+                time_cap_ms=time_cap,
+                velocity_cap=velocity_cap
+            )
+        
+        # Find generated files and encode
         plots = {}
-        for file in os.listdir(plotter.output_dir):
+        for file in os.listdir(output_dir):
             if file.endswith('.png'):
-                with open(os.path.join(plotter.output_dir, file), 'rb') as f:
+                with open(os.path.join(output_dir, file), 'rb') as f:
                     plots[file.replace('.png', '')] = base64.b64encode(f.read()).decode('utf-8')
         
         return jsonify({
@@ -389,7 +461,7 @@ def get_hypothesis_stats():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/api/test/firebase', methods=['GET'])
+@app.route('/api/test-connection', methods=['GET'])
 def test_firebase_connection():
     """Test Firebase connection"""
     try:
@@ -407,6 +479,46 @@ def test_firebase_connection():
             'connected': False,
             'message': str(e)
         }), 500
+
+@app.route('/api/clean/duplicates', methods=['POST'])
+def clean_duplicate_trials():
+    """Clean duplicate trials from Firebase"""
+    try:
+        from firebase_cleaner import FirebaseCleaner
+        
+        data = request.json
+        dry_run = data.get('dry_run', True)  # Default to dry run for safety
+        
+        cleaner = FirebaseCleaner(DEFAULT_CREDENTIALS_FILENAME)
+        
+        # Capture output
+        import io
+        import sys
+        
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = io.StringIO()
+        
+        cleaner.remove_duplicate_trials(dry_run=dry_run)
+        
+        # Get output
+        output = captured_output.getvalue()
+        sys.stdout = old_stdout
+        
+        # Parse output for duplicate count (simple approach)
+        import re
+        match = re.search(r'(\d+) duplicates?', output)
+        duplicate_count = int(match.group(1)) if match else 0
+        
+        return jsonify({
+            'status': 'success',
+            'dry_run': dry_run,
+            'duplicates_found': duplicate_count,
+            'message': 'Dry run complete' if dry_run else 'Duplicates removed',
+            'details': output
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ============================================================================
 # MAIN

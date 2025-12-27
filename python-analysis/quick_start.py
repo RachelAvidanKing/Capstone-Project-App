@@ -1,14 +1,18 @@
 """
-Enhanced Quick Start Script
-Includes new features:
-1. Detailed single participant analysis with paired t-tests
-2. Plot all velocities with time caps and averages
-3. Prepared for GUI transition (modular structure)
+Quick Start Script - Command Line Interface
+
+NOTE: For most userss, the web interface is recommended:
+  1. Start backend: cd python-analysis && python backend_api.py
+  2. Start frontend: cd web-interface && npm start
+  3. Open: http://localhost:3000
+
+This script provides a command-line alternative for advanced users.
 """
 
 import os
 import sys
 from datetime import datetime
+import pandas as pd
 
 # Default credentials file
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -94,12 +98,11 @@ def print_menu():
     print("1. Test Firebase connection")
     print("2. View data summary")
     print("3. Run full analysis (generates all plots and reports)")
-    print("4. Export data to CSV")
-    print("5. Analyze specific participant")
-    print("6. Plot all velocities with time cap")
-    print("7. Clean old analysis outputs")
-    print("8. Help - Learn about Jupyter notebooks")
-    print("9. Reload data from Firebase (refresh cache)")
+    print("4. Export data to CSV (raw or processed)")
+    print("5. Plot all velocities")
+    print("6. Clean old analysis outputs")
+    print("7. Help - Learn about Jupyter notebooks")
+    print("8. Reload data from Firebase (refresh cache)")
     print("0. Exit")
     print("\n" + "="*70)
 
@@ -225,97 +228,37 @@ def run_analysis():
         return False
 
 def export_data():
-    """Export data to CSV"""
-    print("\n💾 Exporting data to CSV...")
-    
-    try:
-        from firebase_connector import FirebaseConnector
-        
-        connector = FirebaseConnector(DEFAULT_CREDENTIALS_FILENAME)
-        participants_df, trials_df = connector.fetch_all_data()
-        
-        if participants_df.empty and trials_df.empty:
-            print("\n⚠️  No data to export")
-            return False
-        
-        files = connector.save_to_csv(participants_df, trials_df)
-        
-        print("\n✅ Data exported successfully!")
-        
-        return True
-    except Exception as e:
-        print(f"\n❌ Export failed: {e}")
-        return False
+    """Export data with specific user choices"""
+    print("\n💾 DATA EXPORT")
+    print("1. Raw Data (Participants & Trials from Firebase)")
+    print("2. Processed Data (Calculated Metrics: Jerk, Peaks, etc.)")
+    choice = input("Select export type (1-2): ").strip()
 
-def analyze_participant_detailed():
-    """NEW: Detailed analysis of specific participant with paired t-tests"""
-    print("\n👤 DETAILED PARTICIPANT ANALYSIS")
-    print("="*70)
+    participants_df, trials_df = load_data_with_cache()
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    if choice == '1':
+        # Raw Export logic
+        filename = f"raw_data_{timestamp}.xlsx"
+        with pd.ExcelWriter(filename) as writer:
+            participants_df.to_excel(writer, sheet_name='Participants', index=False)
+            trials_df.to_excel(writer, sheet_name='Trials', index=False)
+        print(f"✅ Raw data saved to {filename}")
     
-    try:
-        from single_participant_analyzer import SingleParticipantAnalyzer
-        
-        participants_df, trials_df = load_data_with_cache()
-        
-        if participants_df.empty:
-            print("\n⚠️  No participants found")
-            return False
-        
-        # Show participants
-        print(f"\nTotal participants: {len(participants_df)}")
-        print("\nAvailable participants:")
-        
-        for idx, row in enumerate(participants_df.itertuples(), 1):
-            pid = row.participantId
-            p_trials = len(trials_df[trials_df['participantId'] == pid])
-            age = getattr(row, 'age', 'N/A')
-            gender = getattr(row, 'gender', 'N/A')
-            print(f"  {idx}. {pid} ({p_trials} trials, Age: {age}, Gender: {gender})")
-        
-        print("\n" + "-"*70)
-        choice = input(f"\nEnter participant number (1-{len(participants_df)}) or ID: ").strip()
-        
-        # Determine participant_id
-        if choice in participants_df['participantId'].values:
-            participant_id = choice
-        else:
-            try:
-                idx = int(choice)
-                if 1 <= idx <= len(participants_df):
-                    participant_id = participants_df.iloc[idx - 1]['participantId']
-                else:
-                    print(f"❌ Number out of range")
-                    return False
-            except ValueError:
-                print(f"❌ Invalid input")
-                return False
-        
-        # Get participant data
-        p_info = participants_df[participants_df['participantId'] == participant_id].iloc[0]
-        p_trials = trials_df[trials_df['participantId'] == participant_id]
-        
-        if p_trials.empty:
-            print(f"\n❌ No trials found for participant {participant_id}")
-            return False
-        
-        # Run detailed analysis
-        print(f"\n{'='*70}")
-        print(f"Running detailed analysis for: {participant_id}")
-        print(f"{'='*70}\n")
-        
-        analyzer = SingleParticipantAnalyzer(participant_id, p_trials, p_info)
-        analyzer.run_full_analysis()
-        
-        return True
-        
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+    elif choice == '2':
+        # Processed Export logic
+        from backend_api import calculate_advanced_metrics
+        processed_df = calculate_advanced_metrics(trials_df)
+        filename = f"processed_metrics_{timestamp}.csv"
+        processed_df.to_csv(filename, index=False)
+        print(f"✅ Processed metrics saved to {filename}")
+
+    else:
+        print("❌ Invalid choice")
         return False
 
 def plot_all_velocities():
-    """NEW: Plot all velocity profiles with time cap"""
+    """Plot all velocity profiles with time cap"""
     print("\n📈 PLOT ALL VELOCITIES")
     print("="*70)
     
@@ -529,10 +472,10 @@ def main():
     while True:
         print_menu()
         
-        choice = input("\nEnter your choice (0-9): ").strip()
+        choice = input("\nEnter your choice (0-8): ").strip()
         
         if choice == '0':
-            print("\n👋 Goodbye!")
+            print("\nGoodbye!")
             break
         elif choice == '1':
             test_connection()
@@ -543,14 +486,12 @@ def main():
         elif choice == '4':
             export_data()
         elif choice == '5':
-            analyze_participant_detailed()
-        elif choice == '6':
             plot_all_velocities()
-        elif choice == '7':
+        elif choice == '6':
             clean_old_outputs()
-        elif choice == '8':
+        elif choice == '7':
             show_jupyter_help()
-        elif choice == '9':
+        elif choice == '8':
             reload_data()
         else:
             print("\n❌ Invalid choice. Please try again.")
@@ -561,7 +502,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n👋 Interrupted by user. Goodbye!")
+        print("\n\nInterrupted by user. Goodbye!")
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")
         import traceback

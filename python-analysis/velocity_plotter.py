@@ -86,7 +86,7 @@ class VelocityPlotter:
                 
                 if len(velocities) > 0:
                     # Plot individual trial (THIN, very transparent)
-                    ax.plot(times, velocities, color=colors[idx], alpha=0.08, linewidth=0.3)
+                    ax.plot(times, velocities, color=colors[idx], alpha=0.6, linewidth=0.2)
                     valid_count += 1
                     
                     # Store for averaging
@@ -97,12 +97,12 @@ class VelocityPlotter:
             
             print(f"  Valid trials plotted: {valid_count}")
             
-            # Calculate and plot average (THICK line)
+            # Calculate and plot average (MEDIUM thickness - not too thick!)
             if all_velocities_at_time:
                 avg_times = sorted(all_velocities_at_time.keys())
                 avg_velocities = [np.mean(all_velocities_at_time[t]) for t in avg_times]
                 
-                ax.plot(avg_times, avg_velocities, color='black', linewidth=4, 
+                ax.plot(avg_times, avg_velocities, color='black', linewidth=2.5, 
                        label=f'Average (n={valid_count})', zorder=10)
                 
                 print(f"  Average profile calculated from {len(avg_times)} time points")

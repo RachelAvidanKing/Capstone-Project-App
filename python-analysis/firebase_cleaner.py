@@ -1,10 +1,14 @@
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 from collections import defaultdict
 
-# We can reuse your existing authentication logic
+# Default credentials file
+script_dir = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CREDENTIALS_FILENAME = os.path.join(script_dir, 'serviceAccountKey.json')
+
 class FirebaseCleaner:
-    def __init__(self, credentials_path: str = 'serviceAccountKey.json'):
+    def __init__(self, credentials_path: str = DEFAULT_CREDENTIALS_FILENAME):
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_path)
             firebase_admin.initialize_app(cred)
@@ -42,7 +46,7 @@ class FirebaseCleaner:
                 continue
 
             # 3. Group trials by a unique timestamp
-            # We use 'goBeepTimestamp' (or 'trialStartTimestamp') as the unique fingerprint
+            # using 'goBeepTimestamp' (or 'trialStartTimestamp') as the unique fingerprint
             grouped_trials = defaultdict(list)
             
             for trial in all_trials:
@@ -51,7 +55,7 @@ class FirebaseCleaner:
                 if unique_key is None:
                     unique_key = trial.get('trialStartTimestamp')
                 
-                # If neither exists, we can't safely identify duplicates, so skip
+                # If neither exists,there is no way to safely identify duplicates, so skip
                 if unique_key is not None:
                     grouped_trials[unique_key].append(trial)
 
@@ -61,8 +65,8 @@ class FirebaseCleaner:
             for timestamp, trials_list in grouped_trials.items():
                 # If there is more than 1 trial with this exact timestamp...
                 if len(trials_list) > 1:
-                    # Sort them to ensure we always keep/delete the same ones (deterministic)
-                    # We keep the first one, delete the rest
+                    # Sort them to ensure to always keep/delete the same ones (deterministic)
+                    # Keep the first one, delete the rest
                     trials_list.sort(key=lambda x: x['__doc_id'])
                     
                     trials_to_keep = trials_list[0]
@@ -98,11 +102,9 @@ if __name__ == "__main__":
     cleaner = FirebaseCleaner()
     
     # ---------------------------------------------------------
-    # STEP 1: Run with dry_run=True first to verify!
+    # Run with dry_run=True first to verify!
     # ---------------------------------------------------------
     cleaner.remove_duplicate_trials(dry_run=True)
     
-    # ---------------------------------------------------------
-    # STEP 2: Uncomment the line below ONLY when you are ready
-    # ---------------------------------------------------------
+    # After verifying the output, uncomment the line below to actually delete duplicates
     # cleaner.remove_duplicate_trials(dry_run=False)

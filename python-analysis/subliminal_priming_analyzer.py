@@ -184,7 +184,9 @@ def create_comparison_plot(data: pd.DataFrame, grouping_col: str,
 # ============================================================================
 
 class SubliminalPrimingAnalyzer:
-    DEFAULT_CREDENTIALS = 'serviceAccountKey.json'
+    # Default credentials file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    DEFAULT_CREDENTIALS_FILENAME = os.path.join(script_dir, 'serviceAccountKey.json')
     AGE_MAPPING = {22: '18-25', 30: '26-35', 40: '36-45', 53: '46-60', 65: '60+'}
     AGE_ORDER = ['18-25', '26-35', '36-45', '46-60', '60+']
     
@@ -193,8 +195,12 @@ class SubliminalPrimingAnalyzer:
         self.raw_trials = trials_df.copy()
         self.participants_df = participants_df.copy()
         
+        # Force directory to be relative to the script's location
+        base_dir = os.path.dirname(os.path.abspath(__file__))
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_dir = f'analysis_outputs/run_{timestamp}'
+        
+        # This keeps everything inside python-analysis folder
+        self.output_dir = os.path.join(base_dir, 'analysis_outputs', f'run_{timestamp}')
         self.figures_dir = os.path.join(self.output_dir, 'figures')
         self.demographic_dir = os.path.join(self.figures_dir, 'demographic_comparisons')
         os.makedirs(self.demographic_dir, exist_ok=True)
