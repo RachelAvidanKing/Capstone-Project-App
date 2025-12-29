@@ -273,10 +273,81 @@ class ThresholdActivity : AppCompatActivity() {
         disablePatches()
 
         val jndThreshold = viewModel.controller.calculateJNDThreshold()
+
+        if (jndThreshold == null) {
+            // CRITICAL ERROR: No data collected
+            showDataCollectionError()
+            return
+        }
+
         Log.d(TAG, "Calculated JND Threshold: $jndThreshold")
 
         lifecycleScope.launch {
             saveThreshold(jndThreshold)
+        }
+    }
+
+    /**
+     * Shows error dialog when no data was collected during the test.
+     * Offers the participant a chance to restart.
+     */
+    private fun showDataCollectionError() {
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Data Collection Error")
+                .setMessage(
+                    "There was an error collecting your responses during the test. " +
+                            "This should not happen normally.\n\n" +
+                            "Would you like to restart the threshold test?"
+                )
+                .setPositiveButton("Restart Test") { _, _ ->
+                    restartThresholdTest()
+                }
+                .setNegativeButton("Exit") { _, _ ->
+                    handleExitAfterError()
+                }
+                .setCancelable(false)
+                .show()
+        }
+    }
+
+    /**
+     * Restarts the threshold test with a fresh controller.
+     */
+    private fun restartThresholdTest() {
+        // Create a fresh controller
+        viewModel.controller = ThresholdController()
+        viewModel.currentTrialState = null
+
+        // Reset UI
+        patches.forEach { patch ->
+            patch.isEnabled = true
+            patch.tag = null
+        }
+
+        binding.tvTitle.text = "Color Discrimination Test"
+        binding.tvQuestion.visibility = android.view.View.VISIBLE
+        binding.btnN.visibility = android.view.View.GONE
+
+        // Start fresh
+        startNextTrial()
+
+        showToast("Test restarted. Please complete all 100 trials.")
+        Log.d(TAG, "Threshold test restarted due to data collection error")
+    }
+
+    /**
+     * Handles exit after a data collection error.
+     */
+    private fun handleExitAfterError() {
+        lifecycleScope.launch {
+            try {
+                showToast("Exiting. Your demographics are saved.")
+                repository.clearCurrentParticipant()
+                navigateToLogin()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during exit after error", e)
+            }
         }
     }
 
@@ -301,6 +372,7 @@ class ThresholdActivity : AppCompatActivity() {
 
             if (participant == null) {
                 Log.e(TAG, "No participant found in database")
+                showDataCollectionError()
                 return
             }
 
@@ -410,7 +482,6 @@ class ThresholdActivity : AppCompatActivity() {
     private fun handleExitBeforeCompletion() {
         lifecycleScope.launch {
             try {
-                repository.clearIncompleteTrialData()
                 showToast("Exiting. Your demographics are saved.")
 
                 repository.clearCurrentParticipant()
@@ -451,6 +522,13 @@ class ThresholdActivity : AppCompatActivity() {
         val participant = repository.getCurrentParticipant() ?: return
 
         val jndThreshold = viewModel.controller.calculateJNDThreshold()
+
+        if (jndThreshold == null) {
+            Log.w(TAG, "⚠ Cannot save threshold - no valid data collected")
+            Log.w(TAG, "  Participant will need to redo JND test on next login")
+            return
+        }
+
         val updatedParticipant = participant.copy(jndThreshold = jndThreshold)
 
         repository.updateParticipant(updatedParticipant)
@@ -505,7 +583,7 @@ class ThresholdActivity : AppCompatActivity() {
 
 class ThresholdViewModel : ViewModel() {
     // This controller survives rotation because it lives in the ViewModel
-    val controller = ThresholdController()
+    var controller = ThresholdController()
 
     // We cache the current state so we don't re-randomize the colors
     // just because the screen rotated.

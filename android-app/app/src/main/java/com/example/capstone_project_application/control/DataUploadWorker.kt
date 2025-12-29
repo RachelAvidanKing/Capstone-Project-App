@@ -13,26 +13,7 @@ import org.json.JSONArray
 
 /**
  * Background worker for uploading unsynced data to Firebase Firestore.
- *
- * This worker handles batch uploads of:
- * - Participant demographic data
- * - Target trial results
- * - Movement sensor data
- *
- * ## Critical Performance Features:
- * - Uses Firestore WriteBatch for efficient batch uploads (up to 500 ops)
- * - Chunked processing to handle large datasets
- * - Transaction-like behavior ensures data consistency
- * - Automatic retry on failure via WorkManager
- *
- * ## Upload Strategy:
- * 1. Upload participants first (dependencies)
- * 2. Upload target trials in batches
- * 3. Upload movement data in batches
- * 4. Mark successfully uploaded items as synced
- *
- * @property appContext Application context
- * @property workerParams Worker parameters from WorkManager
+ * ONLY uploads data for participants who have completed all required trials.
  */
 class DataUploadWorker(
     appContext: Context,
@@ -44,34 +25,25 @@ class DataUploadWorker(
 
     companion object {
         private const val TAG = "DataUploadWorker"
-
-        // Firestore batch limit is 500, use 450 to be safe
         private const val BATCH_SIZE = 450
-
-        // Collection names
         private const val COLLECTION_PARTICIPANTS = "participants"
         private const val COLLECTION_TARGET_TRIALS = "target_trials"
-        private const val COLLECTION_MOVEMENT_DATA = "movement_data"
+        private const val EXPECTED_TRIAL_COUNT = 15 // MUST match TargetController.TOTAL_TRIALS
     }
 
-    /**
-     * Executes the upload work on a background thread.
-     *
-     * @return Result.success() if all uploads succeed, Result.retry() on failure
-     */
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "═══════════════════════════════════════════")
+                Log.d(TAG, "╔═══════════════════════════════════════════╗")
                 Log.d(TAG, "STARTING DATA UPLOAD JOB")
-                Log.d(TAG, "═══════════════════════════════════════════")
+                Log.d(TAG, "╚═══════════════════════════════════════════╝")
 
                 uploadParticipants()
                 uploadTargetTrials()
 
-                Log.d(TAG, "═══════════════════════════════════════════")
+                Log.d(TAG, "╔═══════════════════════════════════════════╗")
                 Log.d(TAG, "UPLOAD JOB COMPLETED SUCCESSFULLY")
-                Log.d(TAG, "═══════════════════════════════════════════")
+                Log.d(TAG, "╚═══════════════════════════════════════════╝")
                 Result.success()
             } catch (e: Exception) {
                 Log.e(TAG, "✗✗✗ UPLOAD FAILED ✗✗✗", e)
@@ -84,10 +56,6 @@ class DataUploadWorker(
     // Participant Upload
     // ===========================
 
-    /**
-     * Uploads unsynced participants to Firestore.
-     * Uses simple set operations since participant count is typically low.
-     */
     private suspend fun uploadParticipants() {
         val unsyncedParticipants = roomDb.participantDao().getUnsyncedParticipants()
 
@@ -118,7 +86,6 @@ class DataUploadWorker(
             Log.d(TAG, "  ✓ Participant ${participant.participantId.take(8)}... uploaded")
         }
 
-        // Mark all as uploaded in one transaction
         val participantIds = unsyncedParticipants.map { it.participantId }
         roomDb.participantDao().markAsUploaded(participantIds)
 
@@ -126,13 +93,9 @@ class DataUploadWorker(
     }
 
     // ===========================
-    // Target Trial Upload
+    // Target Trial Upload - WITH COMPLETION CHECK
     // ===========================
 
-    /**
-     * Uploads unsynced target trials using Firestore batch writes.
-     * CRITICAL OPTIMIZATION: Uses WriteBatch for up to 50x faster uploads.
-     */
     private suspend fun uploadTargetTrials() {
         val unsyncedTrials = roomDb.targetTrialDao().getUnsyncedTrials()
 
@@ -141,13 +104,24 @@ class DataUploadWorker(
             return
         }
 
-        Log.d(TAG, "→ Uploading ${unsyncedTrials.size} target trial(s) using batch writes")
+        Log.d(TAG, "→ Found ${unsyncedTrials.size} unsynced trial(s)")
 
+        // Group by participant and check completion
         val trialsByParticipant = unsyncedTrials.groupBy { it.participantId }
         val uploadedTrialIds = mutableListOf<Int>()
+        val incompleteParticipants = mutableListOf<String>()
 
         for ((participantId, trials) in trialsByParticipant) {
-            Log.d(TAG, "  → Uploading ${trials.size} trials for participant ${participantId.take(8)}...")
+            val trialCount = trials.size
+
+            // CRITICAL CHECK: Only upload if participant completed ALL trials
+            if (trialCount < EXPECTED_TRIAL_COUNT) {
+                Log.w(TAG, "  ⚠ Participant ${participantId.take(8)}... has only $trialCount/$EXPECTED_TRIAL_COUNT trials - SKIPPING upload")
+                incompleteParticipants.add(participantId)
+                continue
+            }
+
+            Log.d(TAG, "  → Uploading $trialCount trials for participant ${participantId.take(8)}...")
 
             // Upload in chunks to respect Firestore batch limit
             trials.chunked(BATCH_SIZE).forEach { chunk ->
@@ -156,18 +130,19 @@ class DataUploadWorker(
             }
         }
 
-        // Mark all uploaded trials as synced
-        roomDb.targetTrialDao().markAsUploaded(uploadedTrialIds)
+        // Mark only uploaded trials as synced
+        if (uploadedTrialIds.isNotEmpty()) {
+            roomDb.targetTrialDao().markAsUploaded(uploadedTrialIds)
+            Log.d(TAG, "✓ ${uploadedTrialIds.size} trials uploaded and marked as synced")
+        }
 
-        Log.d(TAG, "✓ All target trials uploaded and marked as synced")
+        // Log warning about incomplete data
+        if (incompleteParticipants.isNotEmpty()) {
+            Log.w(TAG, "⚠ ${incompleteParticipants.size} participant(s) with incomplete data not uploaded")
+            Log.w(TAG, "  This data will remain in local database until completed or cleared")
+        }
     }
 
-    /**
-     * Uploads a batch of trials for a single participant.
-     *
-     * @param participantId The participant ID
-     * @param trials List of trials to upload (max BATCH_SIZE)
-     */
     private suspend fun uploadTrialBatch(
         participantId: String,
         trials: List<com.example.capstone_project_application.entity.TargetTrialResult>
@@ -183,18 +158,10 @@ class DataUploadWorker(
             batch.set(newTrialRef, trialMap)
         }
 
-        // Commit entire batch atomically
         batch.commit().await()
         Log.d(TAG, "    ✓ Batch of ${trials.size} trials uploaded")
     }
 
-    /**
-     * Builds a map representation of a trial for Firestore.
-     * Includes parsing of JSON movement path.
-     *
-     * @param trial The trial result to convert
-     * @return Map of field names to values
-     */
     private fun buildTrialMap(
         trial: com.example.capstone_project_application.entity.TargetTrialResult
     ): MutableMap<String, Any?> {
@@ -214,7 +181,6 @@ class DataUploadWorker(
             "goBeepTimestamp" to trial.goBeepTimestamp
         )
 
-        // Add optional fields if present
         trial.firstMovementTimestamp?.let { trialMap["firstMovementTimestamp"] = it }
         trial.targetReachedTimestamp?.let { trialMap["targetReachedTimestamp"] = it }
         trial.reactionTime?.let { trialMap["reactionTime"] = it }
@@ -224,12 +190,6 @@ class DataUploadWorker(
         return trialMap
     }
 
-    /**
-     * Parses the JSON movement path into a list of maps.
-     *
-     * @param movementPath JSON string of movement coordinates
-     * @return List of coordinate maps
-     */
     private fun parseMovementPath(movementPath: String): List<Map<String, Any>> {
         val movementPathList = mutableListOf<Map<String, Any>>()
 
