@@ -191,16 +191,18 @@ class SubliminalPrimingAnalyzer:
     AGE_ORDER = ['18-25', '26-35', '36-45', '46-60', '60+']
     
     def __init__(self, trials_df: pd.DataFrame, participants_df: pd.DataFrame,
-                 outlier_threshold_ms: int = 50000):
+                 outlier_threshold_ms: int = 50000, output_dir: str = None):
         self.raw_trials = trials_df.copy()
         self.participants_df = participants_df.copy()
         
-        # Force directory to be relative to the script's location
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Use provided directory OR create one in script location
+        if output_dir:
+            self.output_dir = output_dir
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.output_dir = os.path.join(base_dir, 'analysis_outputs', f'run_{timestamp}')
         
-        # This keeps everything inside python-analysis folder
-        self.output_dir = os.path.join(base_dir, 'analysis_outputs', f'run_{timestamp}')
         self.figures_dir = os.path.join(self.output_dir, 'figures')
         self.demographic_dir = os.path.join(self.figures_dir, 'demographic_comparisons')
         os.makedirs(self.demographic_dir, exist_ok=True)

@@ -15,85 +15,54 @@ class FirebaseCleaner:
         self.db = firestore.client()
         print("✓ Connected to Firebase for cleanup")
 
-    def remove_duplicate_trials(self, dry_run=True):
-        """
-        Scans all participants and removes duplicate trials based on timestamps.
-        
-        Args:
-            dry_run (bool): If True, only prints what would be deleted. 
-                            If False, actually deletes the documents.
-        """
-        print(f"\nSTARTING DUPLICATE SCAN (Dry Run: {dry_run})")
-        print("=" * 60)
-        
+
+    def remove_incomplete_sets(self, target_count=15, dry_run=True):
+        """Removes participant data if trial count is not a multiple of target_count."""
+        print(f"\nSTARTING INCOMPLETE SET SCAN (Dry Run: {dry_run})")
         participants_ref = self.db.collection('participants')
         total_deleted = 0
         
-        # 1. Loop through every participant
+        for participant in participants_ref.stream():
+            trials_ref = participant.reference.collection('target_trials')
+            trials = list(trials_ref.stream())
+            count = len(trials)
+            
+            if count > 0 and count % target_count != 0:
+                print(f"  → Found incomplete set: {participant.id} ({count} trials)")
+                for doc in trials:
+                    if not dry_run:
+                        doc.reference.delete()
+                    total_deleted += 1
+        return total_deleted
+    
+    def remove_duplicate_trials(self, dry_run=True):
+        """Scans and removes duplicate trials based on timestamps."""
+        print(f"\nSTARTING DUPLICATE SCAN (Dry Run: {dry_run})")
+        participants_ref = self.db.collection('participants')
+        total_deleted = 0
+        
         for participant in participants_ref.stream():
             p_id = participant.id
             trials_ref = participant.reference.collection('target_trials')
+            all_trials = [{'__doc_id': doc.id, **doc.to_dict()} for doc in trials_ref.stream()]
             
-            # 2. Fetch all trials for this participant
-            all_trials = []
-            for doc in trials_ref.stream():
-                data = doc.to_dict()
-                # We store the ID so we know which one to delete later
-                data['__doc_id'] = doc.id 
-                all_trials.append(data)
-            
-            if not all_trials:
-                continue
+            if not all_trials: continue
 
-            # 3. Group trials by a unique timestamp
-            # using 'goBeepTimestamp' (or 'trialStartTimestamp') as the unique fingerprint
             grouped_trials = defaultdict(list)
-            
             for trial in all_trials:
-                # Get the unique key. If 'goBeepTimestamp' is missing, try 'trialStartTimestamp'
-                unique_key = trial.get('goBeepTimestamp')
-                if unique_key is None:
-                    unique_key = trial.get('trialStartTimestamp')
-                
-                # If neither exists,there is no way to safely identify duplicates, so skip
-                if unique_key is not None:
-                    grouped_trials[unique_key].append(trial)
+                key = trial.get('goBeepTimestamp') or trial.get('trialStartTimestamp')
+                if key: grouped_trials[key].append(trial)
 
-            # 4. Check for duplicates in the groups
-            duplicates_found_for_participant = 0
-            
             for timestamp, trials_list in grouped_trials.items():
-                # If there is more than 1 trial with this exact timestamp...
                 if len(trials_list) > 1:
-                    # Sort them to ensure to always keep/delete the same ones (deterministic)
-                    # Keep the first one, delete the rest
                     trials_list.sort(key=lambda x: x['__doc_id'])
-                    
-                    trials_to_keep = trials_list[0]
-                    trials_to_delete = trials_list[1:] # All items after the first one
-                    
-                    for duplicate in trials_to_delete:
+                    for duplicate in trials_list[1:]:
                         doc_id = duplicate['__doc_id']
-                        
-                        if dry_run:
-                            print(f"[Would Delete] Participant: {p_id} | Trial ID: {doc_id} | Timestamp: {timestamp}")
-                        else:
-                            # ACTUAL DELETION
+                        if not dry_run:
                             trials_ref.document(doc_id).delete()
-                            print(f"✓ [DELETED] Participant: {p_id} | Trial ID: {doc_id}")
-                            
-                        duplicates_found_for_participant += 1
                         total_deleted += 1
-
-            if duplicates_found_for_participant > 0:
-                print(f"  → Found {duplicates_found_for_participant} duplicates for participant {p_id}")
-
-        print("=" * 60)
-        if dry_run:
-            print(f"SCAN COMPLETE. Found {total_deleted} duplicates to delete.")
-            print("To actually delete them, change 'dry_run=True' to 'dry_run=False' at the bottom of the script.")
-        else:
-            print(f"CLEANUP COMPLETE. Successfully deleted {total_deleted} duplicate documents.")
+        return total_deleted
+    
 
 # ==========================================
 # MAIN EXECUTION
@@ -101,10 +70,15 @@ class FirebaseCleaner:
 if __name__ == "__main__":
     cleaner = FirebaseCleaner()
     
-    # ---------------------------------------------------------
-    # Run with dry_run=True first to verify!
-    # ---------------------------------------------------------
-    cleaner.remove_duplicate_trials(dry_run=True)
+    # SAFETY: Keep dry_run=True for the first run!
+    IS_DRY_RUN = True 
     
-    # After verifying the output, uncomment the line below to actually delete duplicates
-    # cleaner.remove_duplicate_trials(dry_run=False)
+    # Step 1: Remove duplicates first
+    cleaner.remove_duplicate_trials(dry_run=IS_DRY_RUN)
+    
+    # Step 2: Remove incomplete sets (anything not a multiple of 15)
+    cleaner.remove_incomplete_sets(target_count=15, dry_run=IS_DRY_RUN)
+    
+    if IS_DRY_RUN:
+        print("\n[NOTICE] This was a DRY RUN. No data was actually deleted.")
+        print("To perform actual deletion, set 'IS_DRY_RUN = False' in the script.")

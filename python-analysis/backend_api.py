@@ -4,7 +4,7 @@ Handles Firebase connections, data processing, and analysis
 """
 
 import tempfile
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, after_this_request
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -19,6 +19,8 @@ import json
 import os
 from datetime import datetime
 from typing import Dict, List, Tuple
+import atexit
+import shutil
 
 # Import existing modules
 from firebase_connector import FirebaseConnector
@@ -31,6 +33,48 @@ CORS(app)  # Enable CORS for React frontend
 # Default credentials file
 script_dir = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CREDENTIALS_FILENAME = os.path.join(script_dir, 'serviceAccountKey.json')
+
+# Use system temp directory for analysis outputs
+TEMP_ANALYSIS_DIR = tempfile.mkdtemp(prefix='analysis_')
+
+# Track created ZIP files for cleanup
+_created_zips = []
+
+def cleanup_temp_dir():
+    """Clean up temp analysis directory"""
+    if os.path.exists(TEMP_ANALYSIS_DIR):
+        shutil.rmtree(TEMP_ANALYSIS_DIR, ignore_errors=True)
+        print(f"🧹 Cleaned up temp directory: {TEMP_ANALYSIS_DIR}")
+
+def cleanup_temp_zips():
+    """Clean up any ZIP files we created"""
+    for zip_path in _created_zips:
+        if os.path.exists(zip_path):
+            try:
+                os.remove(zip_path)
+                print(f"🧹 Deleted temp ZIP: {zip_path}")
+            except Exception as e:
+                print(f"⚠️ Could not delete {zip_path}: {e}")
+
+atexit.register(cleanup_temp_dir)
+atexit.register(cleanup_temp_zips)
+
+def cleanup_old_zips_on_startup():
+    """Clean up any old analysis ZIPs left from previous runs"""
+    temp_dir = tempfile.gettempdir()
+    count = 0
+    for file in os.listdir(temp_dir):
+        if file.startswith('analysis_results_') and file.endswith('.zip'):
+            try:
+                os.remove(os.path.join(temp_dir, file))
+                count += 1
+            except:
+                pass
+    if count > 0:
+        print(f"🧹 Cleaned up {count} old ZIP file(s) from previous runs")
+
+# Call on startup
+cleanup_old_zips_on_startup()
 
 # Global data cache
 _cache = {
@@ -188,22 +232,22 @@ def export_raw_data():
             )
         
         elif data_type == 'trials':
-            # Export only trials as Excel
+            # Export trials as CSV
             trials_export = trials_df.copy()
             if 'movementPath' in trials_export.columns:
                 trials_export['movementPath'] = trials_export['movementPath'].apply(
                     lambda x: json.dumps(x) if isinstance(x, list) else x
                 )
             
-            output = io.BytesIO()
-            trials_export.to_excel(output, engine='openpyxl', index=False)
+            output = io.StringIO()
+            trials_export.to_csv(output, index=False)
             output.seek(0)
             
             return send_file(
-                output,
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                io.BytesIO(output.getvalue().encode()),
+                mimetype='text/csv',
                 as_attachment=True,
-                download_name=f'raw_trials_{timestamp}.xlsx'
+                download_name=f'raw_trials_{timestamp}.csv'
             )
         
         else:  # 'both' - default legacy behavior
@@ -226,7 +270,7 @@ def export_raw_data():
                 output,
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 as_attachment=True,
-                download_name=f'raw_data_{timestamp}.xlsx'
+                download_name=f'raw_data_{timestamp}.csv'
             )
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -273,8 +317,12 @@ def run_full_analysis():
         participants_df, trials_df = load_data()
         
         # Create analyzer
-        analyzer = SubliminalPrimingAnalyzer(trials_df, participants_df)
-        
+        # Create analyzer with temp directory
+        analyzer = SubliminalPrimingAnalyzer(
+            trials_df, 
+            participants_df,
+            output_dir=TEMP_ANALYSIS_DIR
+        )
         # Run analyses
         analyzer.test_main_hypothesis()
         analyzer.run_all_demographics()
@@ -313,24 +361,22 @@ def run_full_analysis():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/analysis/download', methods=['POST'])
+@app.route('/api/analysis/download', methods=['POST'])
 def download_analysis_package():
     """Download all analysis results as a zip file"""
     try:
         data = request.json
-        # The analyzer provides this path during the /api/analysis/full call
         output_dir = data.get('output_dir') 
         
         if not output_dir:
             return jsonify({'status': 'error', 'message': 'No directory provided'}), 400
 
-        # Convert to absolute path so Python knows exactly where to look
         abs_output_dir = os.path.abspath(output_dir)
         
         if not os.path.exists(abs_output_dir):
             return jsonify({'status': 'error', 'message': f'Path not found: {abs_output_dir}'}), 404
         
-        # Create zip file
-        import zipfile
+        # Create zip file with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         temp_dir = tempfile.gettempdir()
         zip_filename = f'analysis_results_{timestamp}.zip'
@@ -342,13 +388,38 @@ def download_analysis_package():
             for root, dirs, files in os.walk(abs_output_dir):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    # This ensures the ZIP doesn't contain your whole C:\Users\ path
                     arcname = os.path.relpath(file_path, abs_output_dir)
                     zipf.write(file_path, arcname)
                     file_count += 1
         
         if file_count == 0:
             return jsonify({'status': 'error', 'message': 'Target directory was empty'}), 400
+        
+        # Track this ZIP for cleanup
+        _created_zips.append(zip_path)
+        
+        # Send file and schedule deletion after send
+        @after_this_request
+        def remove_file(response):
+            """Delete ZIP after it's been sent"""
+            try:
+                # Give a small delay to ensure file is sent
+                import threading
+                def delayed_delete():
+                    import time
+                    time.sleep(2)  # Wait 2 seconds
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                        print(f"🧹 Deleted ZIP after download: {zip_path}")
+                        if zip_path in _created_zips:
+                            _created_zips.remove(zip_path)
+                
+                thread = threading.Thread(target=delayed_delete)
+                thread.daemon = True
+                thread.start()
+            except Exception as e:
+                print(f"⚠️ Could not delete ZIP: {e}")
+            return response
         
         return send_file(
             zip_path,
@@ -359,6 +430,7 @@ def download_analysis_package():
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/plots/velocity', methods=['POST'])
 def create_velocity_plots():
@@ -372,12 +444,11 @@ def create_velocity_plots():
         
         participants_df, trials_df = load_data()
         
-        # Create a unique output directory for this request
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f'python-analysis/analysis_outputs/velocity_{timestamp}'
-        os.makedirs(output_dir, exist_ok=True)
+        # Create subdirectory in temp
+        velocity_dir = os.path.join(TEMP_ANALYSIS_DIR, f'velocity_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+        os.makedirs(velocity_dir, exist_ok=True)
         
-        plotter = VelocityPlotter(trials_df, output_dir=output_dir)
+        plotter = VelocityPlotter(trials_df, output_dir=velocity_dir)
         
         # Generate unified plot
         plotter.plot_all_velocities(
@@ -480,46 +551,36 @@ def test_firebase_connection():
             'message': str(e)
         }), 500
 
-@app.route('/api/clean/duplicates', methods=['POST'])
-def clean_duplicate_trials():
-    """Clean duplicate trials from Firebase"""
+@app.route('/api/clean/database', methods=['POST'])
+def clean_database():
+    """Generic endpoint to clean duplicates and incomplete sets"""
     try:
         from firebase_cleaner import FirebaseCleaner
-        
         data = request.json
-        dry_run = data.get('dry_run', True)  # Default to dry run for safety
+        dry_run = data.get('dry_run', True)
+        target_count = data.get('target_count', 15)
         
         cleaner = FirebaseCleaner(DEFAULT_CREDENTIALS_FILENAME)
         
-        # Capture output
-        import io
-        import sys
-        
-        old_stdout = sys.stdout
-        sys.stdout = captured_output = io.StringIO()
-        
-        cleaner.remove_duplicate_trials(dry_run=dry_run)
-        
-        # Get output
-        output = captured_output.getvalue()
-        sys.stdout = old_stdout
-        
-        # Parse output for duplicate count (simple approach)
-        import re
-        match = re.search(r'(\d+) duplicates?', output)
-        duplicate_count = int(match.group(1)) if match else 0
+        # Run both cleaning processes
+        dup_count = cleaner.remove_duplicate_trials(dry_run=dry_run)
+        inc_count = cleaner.remove_incomplete_sets(target_count=target_count, dry_run=dry_run)
         
         return jsonify({
             'status': 'success',
             'dry_run': dry_run,
-            'duplicates_found': duplicate_count,
-            'message': 'Dry run complete' if dry_run else 'Duplicates removed',
-            'details': output
+            'summary': {
+                'duplicates_found': dup_count,
+                'incomplete_trials_found': inc_count,
+                'total_actions': dup_count + inc_count
+            },
+            'message': 'Scan complete' if dry_run else 'Cleanup complete'
         })
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
+    
+    
 # ============================================================================
 # MAIN
 # ============================================================================

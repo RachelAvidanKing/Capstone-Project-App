@@ -9,23 +9,31 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Dict, Optional, Tuple
 import os
+from datetime import datetime
 
 
 class VelocityPlotter:
     """Creates comprehensive velocity profile visualizations"""
     
-    def __init__(self, trials_df: pd.DataFrame, output_dir: str = 'analysis_outputs/velocities'):
+    def __init__(self, trials_df: pd.DataFrame, output_dir: str = None):
         """
         Initialize velocity plotter
         
         Args:
             trials_df: DataFrame with all trial data
-            output_dir: Where to save plots
+            output_dir: Where to save plots (if None, creates in script directory)
         """
         self.trials_df = trials_df.copy()
+        
+        # Use provided directory OR create default
+        if output_dir is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = os.path.join(script_dir, 'analysis_outputs', f'velocity_{timestamp}')
+        
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
-    
+        
     def plot_all_velocities(self, 
                            time_cap_ms: int = 10000,
                            velocity_cap_px_s: int = 5000,

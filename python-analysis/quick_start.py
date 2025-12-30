@@ -10,6 +10,7 @@ This script provides a command-line alternative for advanced users.
 """
 
 import os
+import shutil
 import sys
 from datetime import datetime
 import pandas as pd
@@ -25,37 +26,30 @@ _data_cache = {
     'last_loaded': None
 }
 
+# --- UTILITY FUNCTIONS ---
+
 def check_requirements():
     """Check if all required packages are installed"""
     required = ['firebase_admin', 'pandas', 'matplotlib', 'seaborn', 'scipy', 'numpy']
-    missing = []
-    
-    for package in required:
-        try:
-            __import__(package)
-        except ImportError:
-            missing.append(package)
+    missing = [pkg for pkg in required if not __import_util(pkg)]
     
     if missing:
-        print("❌ Missing required packages:")
-        for pkg in missing:
-            print(f"   - {pkg}")
-        print("\nPlease run: pip install -r requirements.txt")
+        print(f"❌ Missing: {', '.join(missing)}. Run: pip install -r requirements.txt")
         return False
-    
     return True
+
+def __import_util(pkg):
+    try:
+        __import__(pkg)
+        return True
+    except ImportError:
+        return False
 
 def check_credentials():
     """Check if Firebase credentials exist"""
     if not os.path.exists(DEFAULT_CREDENTIALS_FILENAME):
-        print("❌ Firebase credentials not found!")
-        print(f"\nLooking for: {DEFAULT_CREDENTIALS_FILENAME}")
-        print("\nPlease:")
-        print("1. Go to Firebase Console → Project Settings → Service Accounts")
-        print("2. Click 'Generate new private key'")
-        print(f"3. Save the file as '{DEFAULT_CREDENTIALS_FILENAME}' in this folder")
+        print(f"❌ Firebase credentials not found at: {DEFAULT_CREDENTIALS_FILENAME}")
         return False
-    
     return True
 
 def load_data_with_cache(force_reload=False):
@@ -63,48 +57,38 @@ def load_data_with_cache(force_reload=False):
     from firebase_connector import load_data
     
     if force_reload or _data_cache['participants'] is None:
-        if force_reload:
-            print("🔄 Reloading data from Firebase...")
-        else:
-            print("📡 Loading data from Firebase...")
-        
-        participants_df, trials_df = load_data(DEFAULT_CREDENTIALS_FILENAME)
-        
-        _data_cache['participants'] = participants_df
-        _data_cache['trials'] = trials_df
-        _data_cache['last_loaded'] = datetime.now()
-        
-        print(f"✅ Loaded {len(participants_df)} participants, {len(trials_df)} trials")
-    else:
-        print("📦 Using cached data...")
-        participants_df = _data_cache['participants']
-        trials_df = _data_cache['trials']
+        print(f"{'🔄 Reloading' if force_reload else '📡 Loading'} data from Firebase...")
+        p_df, t_df = load_data(DEFAULT_CREDENTIALS_FILENAME)
+        _data_cache.update({'participants': p_df, 'trials': t_df, 'last_loaded': datetime.now()})
+        print(f"✅ Loaded {len(p_df)} participants, {len(t_df)} trials")
     
-    return participants_df, trials_df
+    return _data_cache['participants'], _data_cache['trials']
+
+# --- MENU ACTIONS ---
 
 def print_menu():
-    """Display menu options"""
     print("\n" + "="*70)
-    print("REACHING MOVEMENT ANALYSIS - ENHANCED VERSION")
+    print("REACHING MOVEMENT ANALYSIS - COMMAND CENTER")
     print("="*70)
-    
     if _data_cache['last_loaded']:
-        cache_time = _data_cache['last_loaded'].strftime('%H:%M:%S')
-        p_count = len(_data_cache['participants']) if _data_cache['participants'] is not None else 0
-        t_count = len(_data_cache['trials']) if _data_cache['trials'] is not None else 0
-        print(f"📦 Data cached: {p_count} participants, {t_count} trials (loaded at {cache_time})")
+        print(f"📦 Cache: {len(_data_cache['participants'])} pts | {len(_data_cache['trials'])} trials")
     
-    print("\nWhat would you like to do?\n")
-    print("1. Test Firebase connection")
-    print("2. View data summary")
-    print("3. Run full analysis (generates all plots and reports)")
-    print("4. Export data to CSV (raw or processed)")
-    print("5. Plot all velocities")
-    print("6. Clean old analysis outputs")
-    print("7. Help - Learn about Jupyter notebooks")
-    print("8. Reload data from Firebase (refresh cache)")
+    print("\n--- DATA MANAGEMENT ---")
+    print("1. View Data Summary")
+    print("2. Export/Backup Data (CSV)")
+    print("3. CLEAN FIRESTORE (Remove duplicates & partial sets)")
+    print("4. Refresh Data Cache (Force reload from Firebase)")
+    
+    print("\n--- ANALYSIS & PLOTTING ---")
+    print("5. Run Full Analysis Report")
+    print("6. Plot Velocity Profiles")
+    print("7. Manage Local Files (Clean 'analysis_outputs' folder)")
+    
+    print("\n--- SYSTEM ---")
+    print("8. Test Firebase Connection")
+    print("9. Help (Jupyter/Advanced)")
     print("0. Exit")
-    print("\n" + "="*70)
+    print("="*70)
 
 def test_connection():
     """Test Firebase connection"""
@@ -130,43 +114,14 @@ def test_connection():
 
 def view_summary():
     """Display quick data summary"""
-    print("\n📊 Loading data...")
-    try:
-        participants_df, trials_df = load_data_with_cache()
-        
-        print("\n" + "="*70)
-        print("DATA SUMMARY")
-        print("="*70)
-        
-        print(f"\n👥 PARTICIPANTS: {len(participants_df)}")
-        if not participants_df.empty:
-            if 'gender' in participants_df.columns:
-                print(f"   Gender: {participants_df['gender'].value_counts().to_dict()}")
-            if 'age' in participants_df.columns:
-                age_data = participants_df['age'].dropna()
-                if len(age_data) > 0:
-                    print(f"   Age range: {age_data.min():.0f}-{age_data.max():.0f} years")
-            if 'hasGlasses' in participants_df.columns:
-                print(f"   With glasses: {participants_df['hasGlasses'].sum()}")
-            if 'hasAttentionDeficit' in participants_df.columns:
-                print(f"   With ADHD: {participants_df['hasAttentionDeficit'].sum()}")
-        
-        print(f"\n📊 TRIALS: {len(trials_df)}")
-        if not trials_df.empty:
-            if 'trialType' in trials_df.columns:
-                print(f"   By type: {trials_df['trialType'].value_counts().to_dict()}")
-            print(f"\n   Performance metrics:")
-            if 'reactionTime' in trials_df.columns:
-                rt_data = trials_df['reactionTime'].dropna()
-                if len(rt_data) > 0:
-                    print(f"   - Avg reaction time: {rt_data.mean():.1f} ms")
-        
-        return True
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    p_df, t_df = load_data_with_cache()
+    print("\n" + "="*70 + "\nDATA SUMMARY\n" + "="*70)
+    print(f"👥 Participants: {len(p_df)}")
+    if not p_df.empty and 'gender' in p_df.columns:
+        print(f"   Demographics: {p_df['gender'].value_counts().to_dict()}")
+    print(f"📊 Total Trials: {len(t_df)}")
+    if not t_df.empty and 'trialType' in t_df.columns:
+        print(f"   Trial Split: {t_df['trialType'].value_counts().to_dict()}")
 
 def run_analysis():
     """Run full analysis"""
@@ -226,36 +181,74 @@ def run_analysis():
         import traceback
         traceback.print_exc()
         return False
+    
+def clean_firestore_database():
+    """Safety-first cleanup: Dry Run -> Report -> Confirm Deletion"""
+    print("\n" + "="*70)
+    print("FIRESTORE DATABASE CLEANUP")
+    print("="*70)
+    
+    # 1. Mandatory Backup Offer
+    if input("Would you like to backup data to CSV first? (y/n): ").lower() == 'y':
+        export_data()
+
+    try:
+        from firebase_cleaner import FirebaseCleaner
+        cleaner = FirebaseCleaner(DEFAULT_CREDENTIALS_FILENAME)
+
+        print("\n--- STEP 1: DRY RUN (No data will be deleted) ---")
+        # Run both checks in Dry Run mode
+        cleaner.remove_duplicate_trials(dry_run=True)
+        bad_sets = cleaner.remove_incomplete_sets(target_count=15, dry_run=True)
+
+        # 2. Human Confirmation
+        print("\n" + "!"*30)
+        confirm = input("Review the results above. Proceed with ACTUAL deletion? (type 'yes'): ").strip().lower()
+        print("!"*30)
+
+        if confirm == 'yes':
+            print("\n--- STEP 2: ACTUAL CLEANUP ---")
+            cleaner.remove_duplicate_trials(dry_run=False)
+            cleaner.remove_incomplete_sets(target_count=15, dry_run=False)
+            print("\n✅ Database cleaned successfully.")
+            load_data_with_cache(force_reload=True)
+        else:
+            print("\nCleanup cancelled. No data was deleted.")
+
+    except Exception as e:
+        print(f"❌ Error during cleanup: {e}")
 
 def export_data():
     """Export data with specific user choices"""
-    print("\n💾 DATA EXPORT")
-    print("1. Raw Data (Participants & Trials from Firebase)")
-    print("2. Processed Data (Calculated Metrics: Jerk, Peaks, etc.)")
+    print("\n💾 DATA EXPORT / BACKUP")
+    print("1. Raw Data (Recommended for Backup)")
+    print("2. Processed Data (Advanced Metrics)")
     choice = input("Select export type (1-2): ").strip()
 
-    participants_df, trials_df = load_data_with_cache()
+    p_df, t_df = load_data_with_cache()
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    export_dir = os.path.join(script_dir, 'data_exports')
+    os.makedirs(export_dir, exist_ok=True)
 
     if choice == '1':
-        # Raw Export logic
-        filename = f"raw_data_{timestamp}.xlsx"
-        with pd.ExcelWriter(filename) as writer:
-            participants_df.to_excel(writer, sheet_name='Participants', index=False)
-            trials_df.to_excel(writer, sheet_name='Trials', index=False)
-        print(f"✅ Raw data saved to {filename}")
-    
+        p_file = os.path.join(export_dir, f"backup_participants_{timestamp}.csv")
+        t_file = os.path.join(export_dir, f"backup_trials_{timestamp}.csv")
+        p_df.to_csv(p_file, index=False)
+        
+        # Format movementPath for CSV compatibility
+        t_export = t_df.copy()
+        if 'movementPath' in t_export.columns:
+            import json
+            t_export['movementPath'] = t_export['movementPath'].apply(
+                lambda x: json.dumps(x) if isinstance(x, list) else x
+            )
+        t_export.to_csv(t_file, index=False)
+        print(f"✅ Backup saved to: {export_dir}")
     elif choice == '2':
-        # Processed Export logic
         from backend_api import calculate_advanced_metrics
-        processed_df = calculate_advanced_metrics(trials_df)
-        filename = f"processed_metrics_{timestamp}.csv"
-        processed_df.to_csv(filename, index=False)
-        print(f"✅ Processed metrics saved to {filename}")
-
-    else:
-        print("❌ Invalid choice")
-        return False
+        processed_df = calculate_advanced_metrics(t_df)
+        processed_df.to_csv(os.path.join(export_dir, f"processed_{timestamp}.csv"), index=False)
+        print("✅ Processed metrics exported.")
 
 def plot_all_velocities():
     """Plot all velocity profiles with time cap"""
@@ -336,25 +329,23 @@ def plot_all_velocities():
         return False
 
 def clean_old_outputs():
-    """Clean old analysis outputs"""
-    print("\n🧹 Cleaning old analysis outputs...")
+    """Clean old analysis outputs using absolute paths"""
+    outputs_dir = os.path.join(script_dir, 'analysis_outputs')
+    print(f"\n Cleaning old analysis outputs at: {outputs_dir}")
     
     try:
-        import shutil
-        
-        if not os.path.exists('analysis_outputs'):
+        if not os.path.exists(outputs_dir):
             print("No analysis_outputs folder found - nothing to clean!")
             return True
         
-        runs = [d for d in os.listdir('analysis_outputs') 
-                if os.path.isdir(os.path.join('analysis_outputs', d)) and d.startswith('run_')]
+        runs = [d for d in os.listdir(outputs_dir) 
+                if os.path.isdir(os.path.join(outputs_dir, d)) and d.startswith('run_')]
         
         if not runs:
-            print("No analysis runs found!")
+            print("No analysis runs found inside the folder!")
             return True
         
         runs.sort(reverse=True)
-        
         print(f"\nFound {len(runs)} analysis runs")
         print("\nOptions:")
         print("  1. Keep only the most recent run")
@@ -362,42 +353,19 @@ def clean_old_outputs():
         print("  3. Delete all runs")
         print("  0. Cancel")
         
-        choice = input("\nYour choice: ").strip()
+        choice = input("\nChoice: ").strip()
+        if choice == '1': to_delete = runs[1:]
+        elif choice == '2': to_delete = runs[3:]
+        elif choice == '3': to_delete = runs
+        else: return True
         
-        if choice == '0':
-            print("Cancelled")
-            return True
-        elif choice == '1':
-            to_delete = runs[1:]
-        elif choice == '2':
-            to_delete = runs[3:]
-        elif choice == '3':
-            to_delete = runs
-        else:
-            print("Invalid choice")
-            return False
-        
-        if not to_delete:
-            print("Nothing to delete!")
-            return True
-        
-        confirm = input(f"\n⚠️  Delete {len(to_delete)} runs? (yes/no): ").strip().lower()
-        
-        if confirm == 'yes':
+        if to_delete and input(f"Delete {len(to_delete)} runs? (y/n): ").lower() == 'y':
             for run in to_delete:
-                run_path = os.path.join('analysis_outputs', run)
-                shutil.rmtree(run_path)
+                shutil.rmtree(os.path.join(outputs_dir, run))
                 print(f"  ✓ Deleted {run}")
-            
-            print(f"\n✅ Deleted {len(to_delete)} runs")
-            return True
-        else:
-            print("Cancelled")
-            return False
-            
+            print("✅ Cleaned.")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
-        return False
+        print(f"❌ Error: {e}")
 
 def show_jupyter_help():
     """Show help about Jupyter notebooks"""
@@ -453,57 +421,31 @@ def reload_data():
         return False
 
 def main():
-    """Main program loop"""
-    print("\n" + "="*70)
-    print("REACHING MOVEMENT ANALYSIS TOOL - ENHANCED")
-    print("="*70)
+    if not (check_requirements() and check_credentials()): return
     
-    # Check requirements
-    print("\n🔍 Checking system requirements...")
-    if not check_requirements():
-        return
-    print("✅ All packages installed")
-    
-    if not check_credentials():
-        return
-    print("✅ Firebase credentials found")
-    
-    # Main loop
+    # Mapping the menu options directly to the functions in this script
+    actions = {
+        '1': view_summary,
+        '2': export_data,
+        '3': clean_firestore_database,
+        '4': lambda: load_data_with_cache(force_reload=True),
+        '5': run_analysis,
+        '6': plot_all_velocities, 
+        '7': clean_old_outputs, 
+        '8': test_connection, 
+        '9': show_jupyter_help  
+    }
+
     while True:
         print_menu()
-        
-        choice = input("\nEnter your choice (0-8): ").strip()
-        
-        if choice == '0':
-            print("\nGoodbye!")
-            break
-        elif choice == '1':
-            test_connection()
-        elif choice == '2':
-            view_summary()
-        elif choice == '3':
-            run_analysis()
-        elif choice == '4':
-            export_data()
-        elif choice == '5':
-            plot_all_velocities()
-        elif choice == '6':
-            clean_old_outputs()
-        elif choice == '7':
-            show_jupyter_help()
-        elif choice == '8':
-            reload_data()
+        choice = input("\nSelect an option: ").strip()
+        if choice == '0': break
+        if choice in actions:
+            actions[choice]() # This calls the actual function
         else:
-            print("\n❌ Invalid choice. Please try again.")
-        
+            print("❌ Invalid choice.")
         input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user. Goodbye!")
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+    main()
+

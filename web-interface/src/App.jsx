@@ -77,6 +77,14 @@ export default function BehavioralAnalysisToolkit() {
   });
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      fetchStatus();
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     fetchStatus();
     // Load theme preference from localStorage
     const savedTheme = window.localStorage.getItem('theme');
@@ -249,7 +257,14 @@ export default function BehavioralAnalysisToolkit() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `analysis_results_${Date.now()}.zip`;
+
+      // Use readable timestamp instead of Date.now()
+      const timestamp = new Date().toISOString()
+        .replace(/[:.]/g, '-')  // Replace colons and dots with dashes
+        .replace('T', '_')      // Replace T with underscore
+        .slice(0, -5);          // Remove milliseconds and Z
+
+      a.download = `analysis_results_${timestamp}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -263,6 +278,11 @@ export default function BehavioralAnalysisToolkit() {
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/analysis/full`, { method: 'POST' });
+      
+      if (!response.ok) {
+        throw new Error('Backend not responding');
+      }
+      
       const data = await response.json();
       if (data.status === 'success') {
         setAnalysisResults(data);
@@ -270,7 +290,8 @@ export default function BehavioralAnalysisToolkit() {
         window.alert('✅ Analysis complete!');
       }
     } catch (error) {
-      window.alert('❌ Error: ' + error.message);
+      setStatus(prev => ({ ...prev, connected: false }));
+      window.alert('❌ Cannot connect to backend: ' + error.message);
     }
     setLoading(false);
   };
@@ -304,7 +325,7 @@ export default function BehavioralAnalysisToolkit() {
     
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/clean/duplicates`, {
+      const response = await fetch(`${API_URL}/clean/database`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dry_run: dryRun })
@@ -630,11 +651,29 @@ export default function BehavioralAnalysisToolkit() {
                   Raw Data Export
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-                  <button onClick={() => fetch(`${API_URL}/export/raw?type=participants`).then(r => r.blob()).then(b => { const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = `participants_${Date.now()}.csv`; a.click(); })} style={{ ...styles.button, background: theme.secondary, color: theme.text }}>
+                  <button onClick={() => fetch(`${API_URL}/export/raw?type=participants`)
+                    .then(r => r.blob())
+                    .then(b => { 
+                      const url = URL.createObjectURL(b); 
+                      const a = document.createElement('a'); 
+                      a.href = url; 
+                      a.download = `participants_${Date.now()}.csv`; 
+                      a.click(); 
+                    })} 
+                    style={{ ...styles.button, background: theme.secondary, color: theme.text }}>
                     <Download size={18} /> Participants (CSV)
                   </button>
-                  <button onClick={() => fetch(`${API_URL}/export/raw?type=trials`).then(r => r.blob()).then(b => { const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = `trials_${Date.now()}.xlsx`; a.click(); })} style={{ ...styles.button, background: theme.secondary, color: theme.text }}>
-                    <Download size={18} /> Trials (Excel)
+                  <button onClick={() => fetch(`${API_URL}/export/raw?type=trials`)
+                    .then(r => r.blob())
+                    .then(b => { 
+                      const url = URL.createObjectURL(b); 
+                      const a = document.createElement('a'); 
+                      a.href = url; 
+                      a.download = `trials_${Date.now()}.csv`; 
+                      a.click(); 
+                    })} 
+                    style={{ ...styles.button, background: theme.secondary, color: theme.text }}>
+                    <Download size={18} /> Trials (CSV)
                   </button>
                 </div>
               </div>
@@ -644,7 +683,16 @@ export default function BehavioralAnalysisToolkit() {
                   <FileText size={22} color={theme.primary} />
                   Processed Data
                 </h3>
-                <button onClick={() => fetch(`${API_URL}/export/processed`).then(r => r.blob()).then(b => { const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = `processed_${Date.now()}.csv`; a.click(); })} style={{ ...styles.button, background: theme.primary, color: 'white' }}>
+                <button onClick={() => fetch(`${API_URL}/export/processed`)
+                  .then(r => r.blob())
+                  .then(b => { 
+                    const url = URL.createObjectURL(b); 
+                    const a = document.createElement('a'); 
+                    a.href = url; 
+                    a.download = `processed_${Date.now()}.csv`; 
+                    a.click(); 
+                  })} 
+                  style={{ ...styles.button, background: theme.primary, color: 'white' }}>
                   <Download size={18} /> Download Processed Data (CSV)
                 </button>
               </div>
