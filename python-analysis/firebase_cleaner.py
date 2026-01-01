@@ -33,6 +33,8 @@ class FirebaseCleaner:
                     if not dry_run:
                         doc.reference.delete()
                     total_deleted += 1
+        
+        print(f"--- Incomplete Set Scan Complete: Found {total_deleted} trials ---")
         return total_deleted
     
     def remove_duplicate_trials(self, dry_run=True):
@@ -61,6 +63,8 @@ class FirebaseCleaner:
                         if not dry_run:
                             trials_ref.document(doc_id).delete()
                         total_deleted += 1
+        
+        print(f"--- Duplicate Scan Complete: Found {total_deleted} items ---")
         return total_deleted
     
 

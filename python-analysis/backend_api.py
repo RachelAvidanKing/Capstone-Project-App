@@ -4,6 +4,7 @@ Handles Firebase connections, data processing, and analysis
 """
 
 import tempfile
+import zipfile
 from flask import Flask, jsonify, request, send_file, after_this_request
 from flask_cors import CORS
 import pandas as pd
@@ -437,10 +438,10 @@ def create_velocity_plots():
     """Create custom velocity plots"""
     try:
         data = request.json
-        time_cap = data.get('time_cap', 10000)
+        time_cap = data.get('time_cap', 5500)
         velocity_cap = data.get('velocity_cap', 5000)
         split_by = data.get('split_by', None)
-        include_matrix = data.get('include_matrix', False)
+        include_overlay = data.get('include_overlay', True)
         
         participants_df, trials_df = load_data()
         
@@ -457,23 +458,31 @@ def create_velocity_plots():
             split_by_col=split_by
         )
         
-        # Generate matrix if requested
-        if include_matrix:
-            plotter.create_velocity_comparison_matrix(
+        # Generate overlay plot if requested
+        if include_overlay:
+            plotter.plot_overlay_all_conditions(
                 time_cap_ms=time_cap,
                 velocity_cap=velocity_cap
             )
         
-        # Find generated files and encode
+        # Always generate matrix
+        plotter.create_velocity_comparison_matrix(
+            time_cap_ms=time_cap,
+            velocity_cap=velocity_cap
+        )
+        
+        # Find generated files and encode as base64
         plots = {}
-        for file in os.listdir(output_dir):
+        for file in os.listdir(velocity_dir):
             if file.endswith('.png'):
-                with open(os.path.join(output_dir, file), 'rb') as f:
-                    plots[file.replace('.png', '')] = base64.b64encode(f.read()).decode('utf-8')
+                with open(os.path.join(velocity_dir, file), 'rb') as f:
+                    plot_name = file.replace('.png', '')
+                    plots[plot_name] = base64.b64encode(f.read()).decode('utf-8')
         
         return jsonify({
             'status': 'success',
-            'plots': plots
+            'plots': plots,
+            'output_dir': velocity_dir  # For ZIP download
         })
         
     except Exception as e:
@@ -553,18 +562,16 @@ def test_firebase_connection():
 
 @app.route('/api/clean/database', methods=['POST'])
 def clean_database():
-    """Generic endpoint to clean duplicates and incomplete sets"""
     try:
         from firebase_cleaner import FirebaseCleaner
         data = request.json
         dry_run = data.get('dry_run', True)
-        target_count = data.get('target_count', 15)
         
         cleaner = FirebaseCleaner(DEFAULT_CREDENTIALS_FILENAME)
         
-        # Run both cleaning processes
+        # Capture counts from the methods we updated
         dup_count = cleaner.remove_duplicate_trials(dry_run=dry_run)
-        inc_count = cleaner.remove_incomplete_sets(target_count=target_count, dry_run=dry_run)
+        inc_count = cleaner.remove_incomplete_sets(target_count=15, dry_run=dry_run)
         
         return jsonify({
             'status': 'success',
@@ -573,13 +580,10 @@ def clean_database():
                 'duplicates_found': dup_count,
                 'incomplete_trials_found': inc_count,
                 'total_actions': dup_count + inc_count
-            },
-            'message': 'Scan complete' if dry_run else 'Cleanup complete'
+            }
         })
-        
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-    
+        return jsonify({'status': 'error', 'message': str(e)}), 500    
     
 # ============================================================================
 # MAIN

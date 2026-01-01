@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, Database, Download, BarChart3, TrendingUp, 
-  Settings, RefreshCw, CheckCircle, AlertCircle, ChevronRight,
-  Home, FileText, Zap, Trash2, Moon, Sun, Package
+  Settings, RefreshCw, CheckCircle, ShieldCheck, AlertTriangle, 
+  AlertCircle, ChevronRight, Home, FileText, Zap, Trash2,
+  Moon, Sun, Package
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api';
+// Use 127.0.0.1 instead of localhost to prevent "Failed to Fetch" on some systems
+const API_URL = 'http://127.0.0.1:5000/api';
 
-// Theme configurations
+// --- THEME DEFINITIONS ---
 const lightTheme = {
   page: '#EEF2FF',
   pageGradient: 'linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%)',
@@ -59,34 +61,35 @@ const darkTheme = {
 };
 
 export default function BehavioralAnalysisToolkit() {
+  // --- STATE ---
   const [isDark, setIsDark] = useState(false);
   const theme = isDark ? darkTheme : lightTheme;
   
   const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('overview');
   const [analysisResults, setAnalysisResults] = useState(null);
-  const [velocityPlots, setVelocityPlots] = useState(null);
-  const [duplicateScanResults, setDuplicateScanResults] = useState(null);
+  const [velocityResults, setVelocityResults] = useState(null);
   
+  const [cleanupResult, setCleanupResult] = useState(null); 
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const [velocitySettings, setVelocitySettings] = useState({
-    time_cap: 10000,
+    time_cap: 5500,
     velocity_cap: 5000,
-    split_by: null,
-    include_matrix: false
+    split_by: '',
+    include_overlay: true
   });
 
+  // --- INITIALIZATION ---
   useEffect(() => {
+    fetchStatus();
     const interval = setInterval(() => {
       fetchStatus();
-    }, 30000); // Check every 30 seconds
-    
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    fetchStatus();
-    // Load theme preference from localStorage
     const savedTheme = window.localStorage.getItem('theme');
     if (savedTheme === 'dark') setIsDark(true);
   }, []);
@@ -95,6 +98,7 @@ export default function BehavioralAnalysisToolkit() {
     window.localStorage.setItem('theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
+  // --- STYLES ---
   const styles = {
     page: {
       minHeight: '100vh',
@@ -199,10 +203,17 @@ export default function BehavioralAnalysisToolkit() {
       alignItems: 'center',
       gap: '8px',
     },
+    statBox: {
+      padding: '16px',
+      borderRadius: '12px',
+      background: theme.secondary,
+      border: `1px solid ${theme.border}`
+    }
   };
 
+  // --- API FUNCTIONS ---
+
   const fetchStatus = async () => {
-    setLoading(true);
     try {
       const response = await fetch(`${API_URL}/status`);
       const data = await response.json();
@@ -211,27 +222,21 @@ export default function BehavioralAnalysisToolkit() {
       console.error('Error:', error);
       setStatus({ connected: false, error: error.message });
     }
-    setLoading(false);
   };
 
   const testFirebase = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/test-connection`, { method: 'GET' });
-      const data = await response.json();
-      if (data.status === 'success') {
-        window.alert('✅ Firebase connection successful!');
-      } else {
-        window.alert('❌ Firebase connection failed: ' + (data.message || 'Unknown error'));
-      }
-    } catch (error) {
-      window.alert('❌ Error testing connection: ' + error.message);
+    setIsProcessing(true);
+    await fetchStatus();
+    if(status?.connected) {
+        alert("✅ Connection Successful");
+    } else {
+        alert("❌ Connection Failed");
     }
-    setLoading(false);
+    setIsProcessing(false);
   };
 
   const reloadData = async () => {
-    setLoading(true);
+    setIsProcessing(true);
     try {
       const response = await fetch(`${API_URL}/reload`, { method: 'POST' });
       const data = await response.json();
@@ -242,7 +247,7 @@ export default function BehavioralAnalysisToolkit() {
     } catch (error) {
       window.alert('❌ Error: ' + error.message);
     }
-    setLoading(false);
+    setIsProcessing(false);
   };
 
   const downloadAnalysisPackage = async () => {
@@ -257,13 +262,7 @@ export default function BehavioralAnalysisToolkit() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-
-      // Use readable timestamp instead of Date.now()
-      const timestamp = new Date().toISOString()
-        .replace(/[:.]/g, '-')  // Replace colons and dots with dashes
-        .replace('T', '_')      // Replace T with underscore
-        .slice(0, -5);          // Remove milliseconds and Z
-
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
       a.download = `analysis_results_${timestamp}.zip`;
       document.body.appendChild(a);
       a.click();
@@ -274,14 +273,34 @@ export default function BehavioralAnalysisToolkit() {
     }
   };
 
+  const downloadVelocityPackage = async () => {
+    if (!velocityResults?.output_dir) return;
+    try {
+      const response = await fetch(`${API_URL}/analysis/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ output_dir: velocityResults.output_dir })
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      a.download = `velocity_results_${timestamp}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      window.alert('❌ Error downloading: ' + error.message);
+    }
+  };
+
   const runFullAnalysis = async () => {
-    setLoading(true);
+    setIsProcessing(true);
     try {
       const response = await fetch(`${API_URL}/analysis/full`, { method: 'POST' });
-      
-      if (!response.ok) {
-        throw new Error('Backend not responding');
-      }
+      if (!response.ok) throw new Error('Backend not responding');
       
       const data = await response.json();
       if (data.status === 'success') {
@@ -293,11 +312,11 @@ export default function BehavioralAnalysisToolkit() {
       setStatus(prev => ({ ...prev, connected: false }));
       window.alert('❌ Cannot connect to backend: ' + error.message);
     }
-    setLoading(false);
+    setIsProcessing(false);
   };
 
   const generateVelocityPlots = async () => {
-    setLoading(true);
+    setIsProcessing(true);
     try {
       const response = await fetch(`${API_URL}/plots/velocity`, {
         method: 'POST',
@@ -306,73 +325,52 @@ export default function BehavioralAnalysisToolkit() {
       });
       const data = await response.json();
       if (data.status === 'success') {
-        setVelocityPlots(data.plots);
+        setVelocityResults(data);
         setCurrentPage('velocity-results');
         window.alert('✅ Velocity plots generated!');
       }
     } catch (error) {
       window.alert('❌ Error: ' + error.message);
     }
-    setLoading(false);
+    setIsProcessing(false);
   };
 
-  const cleanDuplicates = async (dryRun = true) => {
-    const confirmMsg = dryRun 
-      ? 'Run duplicate scan (no changes will be made)?' 
-      : '⚠️ This will PERMANENTLY DELETE duplicate trials from Firebase! This cannot be undone. Continue?';
-    
-    if (!window.confirm(confirmMsg)) return;
-    
-    setLoading(true);
+  const handleDatabaseCleanup = async (dryRun = true) => {
+    if (!dryRun) {
+      const confirm = window.confirm("⚠️ WARNING: This will permanently DELETE documents from your Firebase database. Are you absolutely sure?");
+      if (!confirm) return;
+    }
+
+    setIsProcessing(true);
     try {
       const response = await fetch(`${API_URL}/clean/database`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dry_run: dryRun })
+        body: JSON.stringify({ dry_run: dryRun, target_count: 15 })
       });
-      const data = await response.json();
       
+      const data = await response.json();
       if (data.status === 'success') {
-        setDuplicateScanResults(data);
-        
-        const message = dryRun 
-          ? `Scan complete!\n\nDuplicates found: ${data.duplicates_found}\nTrials that would be removed: ${data.duplicates_found}\n\nNo changes were made to the database.`
-          : `✅ Cleanup complete!\n\nDuplicates removed: ${data.duplicates_removed}\n\nThe database has been updated.`;
-        
-        window.alert(message);
-        
+        setCleanupResult(data);
         if (!dryRun) {
-          await fetchStatus(); // Refresh data after cleanup
+          fetchStatus();
         }
       } else {
-        window.alert('❌ Error: ' + (data.message || 'Unknown error'));
+        alert("Cleanup Error: " + data.message);
       }
-    } catch (error) {
-      window.alert('❌ Error: ' + error.message);
+    } catch (err) {
+      console.error("Failed to connect to backend:", err);
+      alert("❌ Error: Failed to fetch from backend. Is the server running?");
+    } finally {
+      setIsProcessing(false);
     }
-    setLoading(false);
   };
-
-  if (loading && !status) {
-    return (
-      <div style={{ ...styles.page, justifyContent: 'center', alignItems: 'center' }}>
-        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); }}`}</style>
-        <div style={{ 
-          border: `4px solid ${theme.border}`, 
-          borderTop: `4px solid ${theme.primary}`, 
-          borderRadius: '50%', 
-          width: '48px', 
-          height: '48px', 
-          animation: 'spin 1s linear infinite' 
-        }}></div>
-      </div>
-    );
-  }
 
   return (
     <div style={styles.page}>
       <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); }}
+        .animate-spin { animation: spin 1s linear infinite; }
         button:hover:not(:disabled) { transform: translateY(-1px); }
       `}</style>
 
@@ -426,15 +424,15 @@ export default function BehavioralAnalysisToolkit() {
           </button>
           <button
             onClick={reloadData}
-            disabled={loading}
+            disabled={isProcessing}
             style={{
               ...styles.button,
               background: theme.primary,
               color: 'white',
-              opacity: loading ? 0.5 : 1,
+              opacity: isProcessing ? 0.5 : 1,
             }}
           >
-            <RefreshCw size={18} />
+            <RefreshCw size={18} className={isProcessing ? 'animate-spin' : ''} />
             Reload Data
           </button>
         </div>
@@ -514,8 +512,8 @@ export default function BehavioralAnalysisToolkit() {
               <p style={{ color: theme.textSecondary, marginBottom: '16px' }}>
                 Generate all plots, run repeated measures ANOVA, and create comprehensive reports.
               </p>
-              <button onClick={runFullAnalysis} disabled={loading || !status?.connected} style={{ ...styles.button, background: theme.primary, color: 'white', opacity: (loading || !status?.connected) ? 0.5 : 1 }}>
-                {loading ? 'Analyzing...' : 'Start Analysis'}
+              <button onClick={runFullAnalysis} disabled={isProcessing || !status?.connected} style={{ ...styles.button, background: theme.primary, color: 'white', opacity: (isProcessing || !status?.connected) ? 0.5 : 1 }}>
+                {isProcessing ? 'Analyzing...' : 'Start Analysis'}
               </button>
             </div>
           )}
@@ -584,7 +582,7 @@ export default function BehavioralAnalysisToolkit() {
                   Time Cap (ms)
                 </label>
                 <input type="number" value={velocitySettings.time_cap} onChange={(e) => setVelocitySettings({...velocitySettings, time_cap: parseInt(e.target.value)})} style={styles.input} />
-                <p style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '4px' }}>Max time on X-axis</p>
+                <p style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '4px' }}>Max time on X-axis (default: 5500ms)</p>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -592,12 +590,12 @@ export default function BehavioralAnalysisToolkit() {
                   Velocity Cap (px/s)
                 </label>
                 <input type="number" value={velocitySettings.velocity_cap} onChange={(e) => setVelocitySettings({...velocitySettings, velocity_cap: parseInt(e.target.value)})} style={styles.input} />
-                <p style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '4px' }}>Max velocity on Y-axis</p>
+                <p style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '4px' }}>Max velocity on Y-axis (default: 5000px/s)</p>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: theme.text, marginBottom: '8px' }}>
-                  Split By
+                  Split By Demographic
                 </label>
                 <select value={velocitySettings.split_by || ''} onChange={(e) => setVelocitySettings({...velocitySettings, split_by: e.target.value || null})} style={styles.input}>
                   <option value="">None</option>
@@ -605,37 +603,44 @@ export default function BehavioralAnalysisToolkit() {
                   <option value="gender">Gender</option>
                   <option value="hasGlasses">Glasses</option>
                 </select>
+                <p style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '4px' }}>Generate separate plots for demographic groups</p>
               </div>
 
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={velocitySettings.include_matrix} onChange={(e) => setVelocitySettings({...velocitySettings, include_matrix: e.target.checked})} />
-                  <span style={{ fontSize: '14px', color: theme.text }}>Include velocity comparison matrix</span>
+                  <input type="checkbox" checked={velocitySettings.include_overlay} onChange={(e) => setVelocitySettings({...velocitySettings, include_overlay: e.target.checked})} />
+                  <span style={{ fontSize: '14px', color: theme.text }}>Include overlay plot with all conditions</span>
                 </label>
               </div>
 
-              <button onClick={generateVelocityPlots} disabled={loading} style={{ ...styles.button, background: '#7C3AED', color: 'white', opacity: loading ? 0.5 : 1 }}>
-                {loading ? 'Generating...' : 'Generate Velocity Plots'}
+              <button onClick={generateVelocityPlots} disabled={isProcessing} style={{ ...styles.button, background: '#7C3AED', color: 'white', opacity: isProcessing ? 0.5 : 1 }}>
+                {isProcessing ? 'Generating...' : 'Generate All Velocity Plots'}
               </button>
             </div>
           )}
 
           {/* Velocity Results */}
-          {currentPage === 'velocity-results' && velocityPlots && (
+          {currentPage === 'velocity-results' && velocityResults && (
             <>
               <div style={{ ...styles.card, background: theme.successBg, color: theme.success, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CheckCircle size={20} />
-                Velocity plots generated!
+                Velocity plots generated successfully!
               </div>
 
               <div style={styles.card}>
-                <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: theme.text, marginBottom: '16px' }}>Velocity Profiles</h3>
-                {Object.entries(velocityPlots).map(([name, plot]) => (
-                  <div key={name} style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: theme.text, margin: 0 }}>Velocity Analysis Results</h3>
+                  <button onClick={downloadVelocityPackage} style={{ ...styles.button, width: 'auto', background: '#7C3AED', color: 'white' }}>
+                    <Package size={18} /> Download All (ZIP)
+                  </button>
+                </div>
+                
+                {velocityResults.plots && Object.entries(velocityResults.plots).map(([name, plot]) => (
+                  <div key={name} style={{ marginBottom: '32px' }}>
                     <h4 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: theme.text, textTransform: 'capitalize' }}>
-                      {name.replace(/_/g, ' ')}
+                      {name.replace(/_/g, ' ').replace(/tcap\d+/, '').replace(/vcap\d+/, '')}
                     </h4>
-                    <img src={`data:image/png;base64,${plot}`} alt={name} style={{ width: '100%', borderRadius: '8px', border: `1px solid ${theme.border}`, marginBottom: '16px' }} />
+                    <img src={`data:image/png;base64,${plot}`} alt={name} style={{ width: '100%', borderRadius: '8px', border: `1px solid ${theme.border}`, marginBottom: '8px' }} />
                   </div>
                 ))}
               </div>
@@ -710,13 +715,13 @@ export default function BehavioralAnalysisToolkit() {
                 
                 <button
                   onClick={testFirebase}
-                  disabled={loading}
+                  disabled={isProcessing}
                   style={{ 
                     ...styles.button, 
                     background: theme.secondary, 
                     color: theme.text, 
                     marginBottom: '12px',
-                    opacity: loading ? 0.5 : 1
+                    opacity: isProcessing ? 0.5 : 1
                   }}
                 >
                   <Zap size={18} />
@@ -725,12 +730,12 @@ export default function BehavioralAnalysisToolkit() {
 
                 <button
                   onClick={fetchStatus}
-                  disabled={loading}
+                  disabled={isProcessing}
                   style={{ 
                     ...styles.button, 
                     background: theme.secondary, 
                     color: theme.text,
-                    opacity: loading ? 0.5 : 1
+                    opacity: isProcessing ? 0.5 : 1
                   }}
                 >
                   <RefreshCw size={18} />
@@ -741,7 +746,7 @@ export default function BehavioralAnalysisToolkit() {
               <div style={styles.card}>
                 <h3 style={styles.cardTitle}>
                   <Trash2 size={22} color={theme.warning} />
-                  Duplicate Cleaner
+                  Database Cleaner
                 </h3>
                 
                 <div style={{ 
@@ -752,63 +757,69 @@ export default function BehavioralAnalysisToolkit() {
                   marginBottom: '16px'
                 }}>
                   <p style={{ fontSize: '14px', color: theme.text, margin: 0 }}>
-                    ⚠️ <strong>Caution:</strong> The cleanup operation permanently removes duplicate trials from Firebase. Always run a dry run scan first!
+                    ⚠️ <strong>Caution:</strong> The cleanup operation permanently removes trials from Firebase. Always run a dry run scan first!
                   </p>
                 </div>
 
-                {duplicateScanResults && (
+                {cleanupResult && (
                   <div style={{ 
                     background: theme.infoBg,
                     borderRadius: '8px',
                     padding: '16px',
                     marginBottom: '16px'
                   }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: '600', color: theme.text, marginBottom: '8px' }}>
-                      Last Scan Results
-                    </h4>
-                    <p style={{ fontSize: '13px', color: theme.text, margin: '4px 0' }}>
-                      Duplicates found: <strong>{duplicateScanResults.duplicates_found}</strong>
-                    </p>
-                    {duplicateScanResults.duplicates_removed !== undefined && (
-                      <p style={{ fontSize: '13px', color: theme.text, margin: '4px 0' }}>
-                        Duplicates removed: <strong>{duplicateScanResults.duplicates_removed}</strong>
-                      </p>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                        {cleanupResult.summary.total_actions > 0 ?
+                        <AlertTriangle size={24} color={theme.error} /> : <ShieldCheck size={24} color={theme.success} />}
+                        <h4 style={{ color: theme.text, margin: 0 }}>
+                        {cleanupResult.dry_run ? "Scan Results (No Changes Made)" : "Cleanup Results (Success)"}
+                        </h4>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div style={styles.statBox}>
+                        <span style={{ fontSize: '12px', color: theme.textSecondary }}>Duplicates Found</span>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: theme.text }}>{cleanupResult.summary.duplicates_found}</div>
+                        </div>
+                        <div style={styles.statBox}>
+                        <span style={{ fontSize: '12px', color: theme.textSecondary }}>Incomplete Sets</span>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: theme.text }}>{cleanupResult.summary.incomplete_trials_found}</div>
+                        </div>
+                    </div>
                   </div>
                 )}
 
                 <div style={{ display: 'grid', gap: '12px' }}>
                   <button
-                    onClick={() => cleanDuplicates(true)}
-                    disabled={loading}
+                    onClick={() => handleDatabaseCleanup(true)}
+                    disabled={isProcessing}
                     style={{ 
                       ...styles.button, 
                       background: theme.info, 
                       color: 'white',
-                      opacity: loading ? 0.5 : 1
+                      opacity: isProcessing ? 0.5 : 1
                     }}
                   >
                     <Zap size={18} />
-                    {loading ? 'Scanning...' : 'Scan for Duplicates (Dry Run)'}
+                    {isProcessing ? 'Scanning...' : 'Scan for Duplicates or Incomplete Sets (Dry Run)'}
                   </button>
 
                   <button
-                    onClick={() => cleanDuplicates(false)}
-                    disabled={loading}
+                    onClick={() => handleDatabaseCleanup(false)}
+                    disabled={isProcessing}
                     style={{ 
                       ...styles.button, 
                       background: theme.error, 
                       color: 'white',
-                      opacity: loading ? 0.5 : 1
+                      opacity: isProcessing ? 0.5 : 1
                     }}
                   >
                     <Trash2 size={18} />
-                    {loading ? 'Removing...' : 'Remove Duplicates (PERMANENT)'}
+                    {isProcessing ? 'Removing...' : 'Remove Trials (PERMANENT)'}
                   </button>
                 </div>
 
                 <p style={{ fontSize: '12px', color: theme.textSecondary, marginTop: '12px' }}>
-                  Dry run mode will show you which duplicates would be removed without making any changes to the database.
+                  Dry run mode will show you which duplicates or incomplete sets would be removed without making any changes to the database.
                 </p>
               </div>
 

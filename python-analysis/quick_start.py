@@ -1,7 +1,7 @@
 """
 Quick Start Script - Command Line Interface
 
-NOTE: For most userss, the web interface is recommended:
+NOTE: For most users, the web interface is recommended:
   1. Start backend: cd python-analysis && python backend_api.py
   2. Start frontend: cd web-interface && npm start
   3. Open: http://localhost:3000
@@ -184,11 +184,8 @@ def run_analysis():
     
 def clean_firestore_database():
     """Safety-first cleanup: Dry Run -> Report -> Confirm Deletion"""
-    print("\n" + "="*70)
-    print("FIRESTORE DATABASE CLEANUP")
-    print("="*70)
+    print("\n" + "="*70 + "\nFIRESTORE DATABASE CLEANUP\n" + "="*70)
     
-    # 1. Mandatory Backup Offer
     if input("Would you like to backup data to CSV first? (y/n): ").lower() == 'y':
         export_data()
 
@@ -197,26 +194,30 @@ def clean_firestore_database():
         cleaner = FirebaseCleaner(DEFAULT_CREDENTIALS_FILENAME)
 
         print("\n--- STEP 1: DRY RUN (No data will be deleted) ---")
-        # Run both checks in Dry Run mode
-        cleaner.remove_duplicate_trials(dry_run=True)
-        bad_sets = cleaner.remove_incomplete_sets(target_count=15, dry_run=True)
+        dup_count = cleaner.remove_duplicate_trials(dry_run=True)
+        inc_count = cleaner.remove_incomplete_sets(target_count=15, dry_run=True)
+
+        # CHECK IF CLEAN:
+        if dup_count == 0 and inc_count == 0:
+            print("\n✨ Database is clean! No duplicates or incomplete sets found.")
+            return
 
         # 2. Human Confirmation
         print("\n" + "!"*30)
-        confirm = input("Review the results above. Proceed with ACTUAL deletion? (type 'yes'): ").strip().lower()
+        confirm = input(f"Found {dup_count + inc_count} issues. Proceed with ACTUAL deletion? (type 'yes'): ").strip().lower()
         print("!"*30)
 
         if confirm == 'yes':
             print("\n--- STEP 2: ACTUAL CLEANUP ---")
             cleaner.remove_duplicate_trials(dry_run=False)
             cleaner.remove_incomplete_sets(target_count=15, dry_run=False)
-            print("\n✅ Database cleaned successfully.")
+            print("\n✅ Database cleaned. Refreshing local cache...")
             load_data_with_cache(force_reload=True)
         else:
-            print("\nCleanup cancelled. No data was deleted.")
+            print("\nCleanup cancelled.")
 
     except Exception as e:
-        print(f"❌ Error during cleanup: {e}")
+        print(f"❌ Cleanup failed: {e}")
 
 def export_data():
     """Export data with specific user choices"""
@@ -266,16 +267,16 @@ def plot_all_velocities():
         
         # Get time cap
         print("\nSet time cap (milliseconds) to prevent time outliers:")
-        print("  Recommended: 10000 ms (10 seconds)")
-        print("  Default: 10000 ms")
+        print("  Recommended: 5500 ms")
+        print("  Default: 5500 ms")
         
-        time_cap_input = input("\nEnter time cap in ms (press Enter for 10000): ").strip()
+        time_cap_input = input("\nEnter time cap in ms (press Enter for 5500): ").strip()
         
         try:
-            time_cap = int(time_cap_input) if time_cap_input else 10000
+            time_cap = int(time_cap_input) if time_cap_input else 5500
         except ValueError:
-            print("Invalid input, using default 10000 ms")
-            time_cap = 10000
+            print("Invalid input, using default 5500 ms")
+            time_cap = 5500
         
         # Get velocity cap
         print("\nSet velocity cap (pixels/second) to prevent velocity outliers:")
@@ -317,6 +318,12 @@ def plot_all_velocities():
             plotter.create_velocity_comparison_matrix(time_cap_ms=time_cap, 
                                                      velocity_cap=vel_cap)
         
+        # Create overlay plot
+        print("\nWould you like an overlay plot with all conditions together? (yes/no): ")
+        if input().strip().lower() == 'yes':
+            plotter.plot_overlay_all_conditions(time_cap_ms=time_cap, 
+                                               velocity_cap=vel_cap)
+        
         print("\n✅ Velocity plots complete!")
         print(f"📁 Saved to: {plotter.output_dir}/")
         
@@ -331,7 +338,7 @@ def plot_all_velocities():
 def clean_old_outputs():
     """Clean old analysis outputs using absolute paths"""
     outputs_dir = os.path.join(script_dir, 'analysis_outputs')
-    print(f"\n Cleaning old analysis outputs at: {outputs_dir}")
+    print(f"\n🧹 Cleaning old analysis outputs at: {outputs_dir}")
     
     try:
         if not os.path.exists(outputs_dir):
@@ -428,12 +435,12 @@ def main():
         '1': view_summary,
         '2': export_data,
         '3': clean_firestore_database,
-        '4': lambda: load_data_with_cache(force_reload=True),
+        '4': lambda: load_data_with_cache(force_reload=True), # Refresh
         '5': run_analysis,
-        '6': plot_all_velocities, 
-        '7': clean_old_outputs, 
-        '8': test_connection, 
-        '9': show_jupyter_help  
+        '6': plot_all_velocities,
+        '7': clean_old_outputs,
+        '8': test_connection,
+        '9': show_jupyter_help
     }
 
     while True:
@@ -441,11 +448,10 @@ def main():
         choice = input("\nSelect an option: ").strip()
         if choice == '0': break
         if choice in actions:
-            actions[choice]() # This calls the actual function
+            actions[choice]() # Calls the actual function
         else:
             print("❌ Invalid choice.")
         input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
     main()
-
