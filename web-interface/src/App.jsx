@@ -262,7 +262,14 @@ export default function BehavioralAnalysisToolkit() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      // Use UTC timestamp to match backend
+      const now = new Date();
+      const timestamp = now.getUTCFullYear() + 
+                       String(now.getUTCMonth() + 1).padStart(2, '0') + 
+                       String(now.getUTCDate()).padStart(2, '0') + '_' +
+                       String(now.getUTCHours()).padStart(2, '0') + 
+                       String(now.getUTCMinutes()).padStart(2, '0') + 
+                       String(now.getUTCSeconds()).padStart(2, '0');
       a.download = `analysis_results_${timestamp}.zip`;
       document.body.appendChild(a);
       a.click();
@@ -285,7 +292,14 @@ export default function BehavioralAnalysisToolkit() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      // Use UTC timestamp to match backend
+      const now = new Date();
+      const timestamp = now.getUTCFullYear() + 
+                       String(now.getUTCMonth() + 1).padStart(2, '0') + 
+                       String(now.getUTCDate()).padStart(2, '0') + '_' +
+                       String(now.getUTCHours()).padStart(2, '0') + 
+                       String(now.getUTCMinutes()).padStart(2, '0') + 
+                       String(now.getUTCSeconds()).padStart(2, '0');
       a.download = `velocity_results_${timestamp}.zip`;
       document.body.appendChild(a);
       a.click();
@@ -662,7 +676,14 @@ export default function BehavioralAnalysisToolkit() {
                       const url = URL.createObjectURL(b); 
                       const a = document.createElement('a'); 
                       a.href = url; 
-                      a.download = `participants_${Date.now()}.csv`; 
+                      const now = new Date();
+                      const timestamp = now.getUTCFullYear() + 
+                                       String(now.getUTCMonth() + 1).padStart(2, '0') + 
+                                       String(now.getUTCDate()).padStart(2, '0') + '_' +
+                                       String(now.getUTCHours()).padStart(2, '0') + 
+                                       String(now.getUTCMinutes()).padStart(2, '0') + 
+                                       String(now.getUTCSeconds()).padStart(2, '0');
+                      a.download = `participants_${timestamp}.csv`; 
                       a.click(); 
                     })} 
                     style={{ ...styles.button, background: theme.secondary, color: theme.text }}>
@@ -674,7 +695,14 @@ export default function BehavioralAnalysisToolkit() {
                       const url = URL.createObjectURL(b); 
                       const a = document.createElement('a'); 
                       a.href = url; 
-                      a.download = `trials_${Date.now()}.csv`; 
+                      const now = new Date();
+                      const timestamp = now.getUTCFullYear() + 
+                                       String(now.getUTCMonth() + 1).padStart(2, '0') + 
+                                       String(now.getUTCDate()).padStart(2, '0') + '_' +
+                                       String(now.getUTCHours()).padStart(2, '0') + 
+                                       String(now.getUTCMinutes()).padStart(2, '0') + 
+                                       String(now.getUTCSeconds()).padStart(2, '0');
+                      a.download = `trials_${timestamp}.csv`; 
                       a.click(); 
                     })} 
                     style={{ ...styles.button, background: theme.secondary, color: theme.text }}>
@@ -694,7 +722,14 @@ export default function BehavioralAnalysisToolkit() {
                     const url = URL.createObjectURL(b); 
                     const a = document.createElement('a'); 
                     a.href = url; 
-                    a.download = `processed_${Date.now()}.csv`; 
+                    const now = new Date();
+                    const timestamp = now.getUTCFullYear() + 
+                                     String(now.getUTCMonth() + 1).padStart(2, '0') + 
+                                     String(now.getUTCDate()).padStart(2, '0') + '_' +
+                                     String(now.getUTCHours()).padStart(2, '0') + 
+                                     String(now.getUTCMinutes()).padStart(2, '0') + 
+                                     String(now.getUTCSeconds()).padStart(2, '0');
+                    a.download = `processed_${timestamp}.csv`; 
                     a.click(); 
                   })} 
                   style={{ ...styles.button, background: theme.primary, color: 'white' }}>
