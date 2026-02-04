@@ -6,10 +6,14 @@
 
 **Submission:** Final Capstone Project (2026)
 
+
+
 **Academic Use Notice**
 
 This repository contains an academic research project submitted for grading and evaluation purposes only.
 No commercial use is intended. The repository is public solely to allow academic review.
+
+
 
 **Credentials & Security**
 
@@ -24,6 +28,8 @@ google-services.json
 serviceAccountKey.json
 
 Please follow the instructions below to place these files in the correct locations before running the project.
+
+
 
 **Quick Start Instructions**
 ##1. Python Analysis & Web Dashboard
@@ -47,6 +53,8 @@ Double-click User_Help.bat in the project root.
 
 This script automatically installs all required Python and Node.js dependencies and starts the server.
 
+
+
 ##2. Android Application (Pre-built APK)
 
 A compiled release build is provided for immediate testing.
@@ -57,6 +65,8 @@ Open Android Studio → Device Manager and launch an emulator.
 Drag and drop release-builds/app-release.apk onto the running emulator.
 
 Launch Capstone App from the emulator’s app drawer.
+
+
 
 ##3. Android Application (Build From Source)
 
