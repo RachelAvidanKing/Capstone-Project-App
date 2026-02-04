@@ -47,11 +47,13 @@ yarn-error.log*
 # === SECURITY & KEYS (CRITICAL) ===
 # Android
 app/google-services.json
+# Catch the key if it's deep inside a folder
+**/google-services.json
 *.jks
 *.keystore
 keystore.properties
 
 # Python/API
 serviceAccountKey.json
-# Also catch it if it's deep inside a folder
+# Catch the kye if it's deep inside a folder
 **/serviceAccountKey.json
