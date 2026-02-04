@@ -1,7 +1,9 @@
 ###Capstone Project: Effect of Subliminal Perception on Motor Planning
 
 **Students:** Rachel Avidan-King & Daniel Shahar
+
 **Department:** Software Engineering
+
 **Submission:** Final Capstone Project (2026)
 
 **Academic Use Notice**
