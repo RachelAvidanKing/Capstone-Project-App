@@ -22,6 +22,8 @@ from typing import List, Dict, Optional, Tuple
 import os
 from datetime import datetime
 
+DEFAULT_TIME_CAP_MS = 5500
+DEFAULT_VELOCITY_CAP_PX_S = 5000
 
 class VelocityPlotter:
     """
@@ -53,8 +55,8 @@ class VelocityPlotter:
         print(f"Velocity plots will be saved to: {output_dir}")
         
     def plot_all_velocities(self, 
-                           time_cap_ms: int = 5500,
-                           velocity_cap_px_s: int = 6000,
+                           time_cap_ms: int =DEFAULT_TIME_CAP_MS,
+                           velocity_cap_px_s: int = DEFAULT_VELOCITY_CAP_PX_S,
                            split_by_col: Optional[str] = None,
                            conditions: List[str] = None):
         """

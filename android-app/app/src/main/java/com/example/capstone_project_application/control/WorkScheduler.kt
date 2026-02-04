@@ -6,7 +6,6 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.example.capstone_project_application.control.DataUploadWorker
 
 object WorkScheduler {
     private const val TAG = "WorkScheduler"

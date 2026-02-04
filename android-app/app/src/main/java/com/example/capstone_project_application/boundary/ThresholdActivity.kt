@@ -1,27 +1,27 @@
 package com.example.capstone_project_application.boundary
 
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import com.example.capstone_project_application.databinding.ActivityThresholdBinding
-import com.example.capstone_project_application.R
-import com.example.capstone_project_application.control.ThresholdController
-import com.example.capstone_project_application.control.ThresholdTrialState
-import com.example.capstone_project_application.entity.AppDatabase
-import com.example.capstone_project_application.control.DataRepository
-import com.example.capstone_project_application.control.InactivityHelper
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import android.media.AudioManager
-import android.media.ToneGenerator
-import android.view.View
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import com.example.capstone_project_application.R
+import com.example.capstone_project_application.control.DataRepository
+import com.example.capstone_project_application.control.InactivityHelper
+import com.example.capstone_project_application.control.ThresholdController
+import com.example.capstone_project_application.control.ThresholdTrialState
+import com.example.capstone_project_application.databinding.ActivityThresholdBinding
+import com.example.capstone_project_application.entity.AppDatabase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 
 /**
