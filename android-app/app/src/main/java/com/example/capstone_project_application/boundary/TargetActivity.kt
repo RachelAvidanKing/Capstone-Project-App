@@ -15,19 +15,19 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.capstone_project_application.R
+import com.example.capstone_project_application.control.DataRepository
+import com.example.capstone_project_application.control.InactivityHelper
 import com.example.capstone_project_application.control.MovementTracker
 import com.example.capstone_project_application.control.TargetController
 import com.example.capstone_project_application.control.TargetTrialState
 import com.example.capstone_project_application.control.TrialType
 import com.example.capstone_project_application.control.WorkScheduler
-import com.example.capstone_project_application.control.InactivityHelper
 import com.example.capstone_project_application.entity.AppDatabase
-import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.entity.TargetTrialResult
 import kotlinx.coroutines.launch
-import androidx.lifecycle.ViewModelProvider
 
 /**
  * Main experiment activity for target-reaching trials.

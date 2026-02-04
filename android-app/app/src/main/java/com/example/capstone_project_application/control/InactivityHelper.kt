@@ -1,6 +1,5 @@
 package com.example.capstone_project_application.control
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper

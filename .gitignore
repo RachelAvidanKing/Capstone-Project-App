@@ -2,6 +2,8 @@
 .DS_Store
 Thumbs.db
 *.iml
+# Ignore VS Code settings
+.vscode/
 
 # === ANDROID (Root/App) ===
 .gradle/

@@ -39,6 +39,10 @@ data class ThresholdTrialState(
  * The threshold represents the boundary where the difference becomes
  * just barely noticeable (~50% discrimination).
  *
+ *  Fallback**: If all hues > 50%, use the lowest test hue (141) - participant can discriminate everything
+ *  **Error case**: If no trials completed, returns null - participant must restart
+ *
+ *
  * Part of the Control layer in Entity-Boundary-Control pattern.
  */
 class ThresholdController {
@@ -68,6 +72,7 @@ class ThresholdController {
 
         // Threshold calculation parameters
         private const val THRESHOLD_PERCENTAGE = 50.0
+        private const val MIN_TEST_HUE = 141  // For perfect performers
     }
 
     init {
@@ -205,18 +210,27 @@ class ThresholdController {
      *
      * ## Algorithm:
      * 1. Calculate percentage correct for each hue
-     * 2. Sort hues from highest to lowest (furthest from reference first)
-     * 3. Find the highest hue where performance ≤ 50%
+     * 2. Find the highest hue where performance ≤ 50%
+     *      This represents the boundary where the color difference becomes
+     *      just barely noticeable.
+     * 3. If all hues > 50% (perfect performance), return MIN_TEST_HUE (141)
+     *    - Participant can discriminate even the smallest difference
+     * 4. If no trials completed (critical error), return NULL
+     *    - Participant MUST restart the test
      *
-     * This represents the boundary where the color difference becomes
-     * just barely noticeable.
      *
      * @return JND threshold hue, or null if no valid threshold found
      */
     fun calculateJNDThreshold(): Int? {
         val huePerformance = calculatePerformanceForAllHues()
-        val sortedPerformance = sortHuesByDistance(huePerformance)
 
+        if (huePerformance.isEmpty()) {
+            Log.e(TAG, "✗ CRITICAL ERROR: No performance data available after 100 trials!")
+            Log.e(TAG, "  This should never happen. Participant must restart JND test.")
+            return null
+        }
+
+        val sortedPerformance = sortHuesByDistance(huePerformance)
         val threshold = findThreshold(sortedPerformance)
 
         Log.d(TAG, "JND Threshold calculated: $threshold")
@@ -276,6 +290,13 @@ class ThresholdController {
             }
         }
 
+        // Handle case where participant got everything correct
+        if (threshold == null) {
+            Log.d(TAG, "✓ All hues performed > 50% - participant has excellent discrimination")
+            Log.d(TAG, "  Using minimum test hue ($MIN_TEST_HUE) as threshold")
+            return MIN_TEST_HUE
+        }
+
         return threshold
     }
 
@@ -289,7 +310,8 @@ class ThresholdController {
         for ((hue, percentage) in sortedPerformance) {
             val total = occurrences[hue]!!
             val correct = correctAnswers[hue]!!
-            Log.d(TAG, "  Hue $hue: $correct/$total correct (${String.format("%.1f", percentage)}%)")
+            val marker = if (percentage <= THRESHOLD_PERCENTAGE) "✓ AT/BELOW THRESHOLD" else ""
+            Log.d(TAG, "  Hue $hue: $correct/$total correct (${String.format("%.1f", percentage)}%) $marker")
         }
     }
 }

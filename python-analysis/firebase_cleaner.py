@@ -1,108 +1,188 @@
+"""
+Firebase Database Cleaner
+==========================
+Removes duplicate trials and incomplete trial sets from Firestore.
+
+This module provides tools to clean the Firebase database by:
+1. Removing duplicate trials (same timestamp, different document IDs)
+2. Removing incomplete trial sets (not multiples of 15 trials per participant)
+
+IMPORTANT: Always run with dry_run=True first to preview changes!
+"""
+
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 from collections import defaultdict
 
-# We can reuse your existing authentication logic
+# Default credentials file location
+script_dir = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CREDENTIALS_FILENAME = os.path.join(script_dir, 'serviceAccountKey.json')
+
+
 class FirebaseCleaner:
-    def __init__(self, credentials_path: str = 'serviceAccountKey.json'):
+    """
+    Handles cleanup operations on the Firebase database.
+    
+    This class provides safe cleanup operations with dry-run mode
+    to preview changes before actually deleting data.
+    """
+    
+    def __init__(self, credentials_path: str = DEFAULT_CREDENTIALS_FILENAME):
+        """
+        Initialize Firebase connection for cleanup operations.
+        
+        Args:
+            credentials_path (str): Path to Firebase service account key
+        """
+        # Initialize Firebase if not already initialized
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_path)
             firebase_admin.initialize_app(cred)
+        
         self.db = firestore.client()
         print("✓ Connected to Firebase for cleanup")
 
-    def remove_duplicate_trials(self, dry_run=True):
+    def remove_incomplete_sets(self, target_count: int = 15, dry_run: bool = True) -> int:
         """
-        Scans all participants and removes duplicate trials based on timestamps.
+        Remove participants whose trial count is not a multiple of target_count.
+        
+        Each participant should have a complete set of trials (15 in this experiment).
+        This method removes all trials for participants with incomplete sets.
         
         Args:
-            dry_run (bool): If True, only prints what would be deleted. 
-                            If False, actually deletes the documents.
+            target_count (int): Expected number of trials per complete set (default: 15)
+            dry_run (bool): If True, only report what would be deleted without deleting
+            
+        Returns:
+            int: Number of trials that were (or would be) deleted
         """
-        print(f"\nSTARTING DUPLICATE SCAN (Dry Run: {dry_run})")
-        print("=" * 60)
+        mode_text = "DRY RUN" if dry_run else "ACTUAL CLEANUP"
+        print(f"\n{'='*60}")
+        print(f"INCOMPLETE SET SCAN ({mode_text})")
+        print(f"{'='*60}")
         
         participants_ref = self.db.collection('participants')
         total_deleted = 0
         
-        # 1. Loop through every participant
         for participant in participants_ref.stream():
-            p_id = participant.id
+            trials_ref = participant.reference.collection('target_trials')
+            trials = list(trials_ref.stream())
+            count = len(trials)
+            
+            # Check if trial count is incomplete (not a multiple of target_count)
+            if count > 0 and count % target_count != 0:
+                print(f"  → Found incomplete set: {participant.id} ({count} trials)")
+                
+                # Delete all trials for this participant
+                for doc in trials:
+                    if not dry_run:
+                        doc.reference.delete()
+                    total_deleted += 1
+        
+        print(f"{'='*60}")
+        print(f"Incomplete Set Scan Complete: Found {total_deleted} trials")
+        print(f"{'='*60}")
+        
+        return total_deleted
+    
+    def remove_duplicate_trials(self, dry_run: bool = True) -> int:
+        """
+        Scan and remove duplicate trials based on timestamps.
+        
+        Duplicates are identified by having the same timestamp (either goBeepTimestamp
+        or trialStartTimestamp). When duplicates are found, the first one (by document ID)
+        is kept, and the rest are deleted.
+        
+        Args:
+            dry_run (bool): If True, only report what would be deleted without deleting
+            
+        Returns:
+            int: Number of duplicate trials that were (or would be) deleted
+        """
+        mode_text = "DRY RUN" if dry_run else "ACTUAL CLEANUP"
+        print(f"\n{'='*60}")
+        print(f"DUPLICATE SCAN ({mode_text})")
+        print(f"{'='*60}")
+        
+        participants_ref = self.db.collection('participants')
+        total_deleted = 0
+        
+        for participant in participants_ref.stream():
+            participant_id = participant.id
             trials_ref = participant.reference.collection('target_trials')
             
-            # 2. Fetch all trials for this participant
-            all_trials = []
-            for doc in trials_ref.stream():
-                data = doc.to_dict()
-                # We store the ID so we know which one to delete later
-                data['__doc_id'] = doc.id 
-                all_trials.append(data)
+            # Fetch all trials for this participant
+            all_trials = [
+                {'__doc_id': doc.id, **doc.to_dict()} 
+                for doc in trials_ref.stream()
+            ]
             
             if not all_trials:
                 continue
 
-            # 3. Group trials by a unique timestamp
-            # We use 'goBeepTimestamp' (or 'trialStartTimestamp') as the unique fingerprint
+            # Group trials by timestamp (use goBeepTimestamp or trialStartTimestamp)
             grouped_trials = defaultdict(list)
-            
             for trial in all_trials:
-                # Get the unique key. If 'goBeepTimestamp' is missing, try 'trialStartTimestamp'
-                unique_key = trial.get('goBeepTimestamp')
-                if unique_key is None:
-                    unique_key = trial.get('trialStartTimestamp')
-                
-                # If neither exists, we can't safely identify duplicates, so skip
-                if unique_key is not None:
-                    grouped_trials[unique_key].append(trial)
+                # Use goBeepTimestamp as primary key, fall back to trialStartTimestamp
+                timestamp_key = trial.get('goBeepTimestamp') or trial.get('trialStartTimestamp')
+                if timestamp_key:
+                    grouped_trials[timestamp_key].append(trial)
 
-            # 4. Check for duplicates in the groups
-            duplicates_found_for_participant = 0
-            
+            # Find and remove duplicates
             for timestamp, trials_list in grouped_trials.items():
-                # If there is more than 1 trial with this exact timestamp...
                 if len(trials_list) > 1:
-                    # Sort them to ensure we always keep/delete the same ones (deterministic)
-                    # We keep the first one, delete the rest
+                    # Sort by document ID to keep consistent "first" trial
                     trials_list.sort(key=lambda x: x['__doc_id'])
                     
-                    trials_to_keep = trials_list[0]
-                    trials_to_delete = trials_list[1:] # All items after the first one
-                    
-                    for duplicate in trials_to_delete:
+                    # Delete all except the first one
+                    for duplicate in trials_list[1:]:
                         doc_id = duplicate['__doc_id']
+                        print(f"  → Duplicate found for {participant_id}: {doc_id}")
                         
-                        if dry_run:
-                            print(f"[Would Delete] Participant: {p_id} | Trial ID: {doc_id} | Timestamp: {timestamp}")
-                        else:
-                            # ACTUAL DELETION
+                        if not dry_run:
                             trials_ref.document(doc_id).delete()
-                            print(f"✓ [DELETED] Participant: {p_id} | Trial ID: {doc_id}")
-                            
-                        duplicates_found_for_participant += 1
                         total_deleted += 1
+        
+        print(f"{'='*60}")
+        print(f"Duplicate Scan Complete: Found {total_deleted} duplicates")
+        print(f"{'='*60}")
+        
+        return total_deleted
 
-            if duplicates_found_for_participant > 0:
-                print(f"  → Found {duplicates_found_for_participant} duplicates for participant {p_id}")
 
-        print("=" * 60)
-        if dry_run:
-            print(f"SCAN COMPLETE. Found {total_deleted} duplicates to delete.")
-            print("To actually delete them, change 'dry_run=True' to 'dry_run=False' at the bottom of the script.")
-        else:
-            print(f"CLEANUP COMPLETE. Successfully deleted {total_deleted} duplicate documents.")
+# ============================================================================
+# MAIN - Run cleanup operations
+# ============================================================================
 
-# ==========================================
-# MAIN EXECUTION
-# ==========================================
 if __name__ == "__main__":
     cleaner = FirebaseCleaner()
     
-    # ---------------------------------------------------------
-    # STEP 1: Run with dry_run=True first to verify!
-    # ---------------------------------------------------------
-    cleaner.remove_duplicate_trials(dry_run=True)
+    # SAFETY: Keep dry_run=True for the first run!
+    IS_DRY_RUN = True 
     
-    # ---------------------------------------------------------
-    # STEP 2: Uncomment the line below ONLY when you are ready
-    # ---------------------------------------------------------
-    # cleaner.remove_duplicate_trials(dry_run=False)
+    print("\n" + "="*60)
+    print("FIREBASE DATABASE CLEANUP")
+    print("="*60)
+    print(f"Mode: {'DRY RUN (no changes will be made)' if IS_DRY_RUN else 'ACTUAL CLEANUP (DESTRUCTIVE)'}")
+    print("="*60)
+    
+    # Step 1: Remove duplicates first
+    duplicate_count = cleaner.remove_duplicate_trials(dry_run=IS_DRY_RUN)
+    
+    # Step 2: Remove incomplete sets (anything not a multiple of 15)
+    incomplete_count = cleaner.remove_incomplete_sets(target_count=15, dry_run=IS_DRY_RUN)
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print("CLEANUP SUMMARY")
+    print(f"{'='*60}")
+    print(f"Duplicates found: {duplicate_count}")
+    print(f"Incomplete trials found: {incomplete_count}")
+    print(f"Total items: {duplicate_count + incomplete_count}")
+    
+    if IS_DRY_RUN:
+        print("\n⚠️  This was a DRY RUN. No data was actually deleted.")
+        print("To perform actual deletion, set 'IS_DRY_RUN = False' in the script.")
+    else:
+        print("\n✓ Cleanup completed successfully!")

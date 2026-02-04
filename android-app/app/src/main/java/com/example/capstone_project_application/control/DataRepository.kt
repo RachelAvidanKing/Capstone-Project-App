@@ -51,7 +51,6 @@ class DataRepository(
         // Firebase collection names
         private const val COLLECTION_PARTICIPANTS = "participants"
         private const val COLLECTION_TARGET_TRIALS = "target_trials"
-        private const val COLLECTION_MOVEMENT_DATA = "movement_data"
     }
 
     // ===========================

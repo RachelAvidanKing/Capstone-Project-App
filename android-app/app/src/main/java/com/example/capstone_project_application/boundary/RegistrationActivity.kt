@@ -12,9 +12,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.capstone_project_application.R
-import com.example.capstone_project_application.entity.AppDatabase
 import com.example.capstone_project_application.control.DataRepository
 import com.example.capstone_project_application.control.InactivityHelper
+import com.example.capstone_project_application.entity.AppDatabase
 import kotlinx.coroutines.launch
 
 /**
